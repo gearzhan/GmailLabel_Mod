@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gmail Label Extension Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .debug-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .debug-section h3 {
+            margin-top: 0;
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #3367d6;
+        }
+        .log-output {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Gmail Label Extension Debug Tool</h1>
+    
+    <div class="debug-section">
+        <h3>Extension Status</h3>
+        <button onclick="checkExtensionStatus()">Check Extension Status</button>
+        <button onclick="checkServiceWorker()">Check Service Worker</button>
+        <div id="extension-status" class="log-output"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>Storage Debug</h3>
+        <button onclick="checkStorage()">Check Storage</button>
+        <button onclick="clearStorage()">Clear Storage</button>
+        <div id="storage-output" class="log-output"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>Instructions</h3>
+        <ol>
+            <li>Make sure the Gmail Label Extension is loaded in Chrome</li>
+            <li>Open Gmail in another tab</li>
+            <li>Navigate through your emails and labels</li>
+            <li>Check the browser console for debug messages</li>
+            <li>Use the buttons above to check extension status and storage</li>
+        </ol>
+    </div>
+    
+    <script>
+        function log(elementId, message) {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            element.textContent += `[${timestamp}] ${message}\n`;
+        }
+        
+        function checkExtensionStatus() {
+            const output = document.getElementById('extension-status');
+            output.textContent = '';
+            
+            // Check if chrome.runtime is available
+            if (typeof chrome !== 'undefined' && chrome.runtime) {
+                log('extension-status', 'Chrome runtime available');
+                
+                // Try to send a message to the extension
+                chrome.runtime.sendMessage({type: 'ping'}, (response) => {
+                    if (chrome.runtime.lastError) {
+                        log('extension-status', 'Extension not responding: ' + chrome.runtime.lastError.message);
+                    } else {
+                        log('extension-status', 'Extension responded: ' + JSON.stringify(response));
+                    }
+                });
+            } else {
+                log('extension-status', 'Chrome runtime not available - extension not loaded');
+            }
+        }
+        
+        function checkStorage() {
+            const output = document.getElementById('storage-output');
+            output.textContent = '';
+            
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                chrome.storage.local.get(null, (items) => {
+                    log('storage-output', 'Storage contents:');
+                    log('storage-output', JSON.stringify(items, null, 2));
+                });
+            } else {
+                log('storage-output', 'Chrome storage API not available');
+            }
+        }
+        
+        function clearStorage() {
+            const output = document.getElementById('storage-output');
+            
+            if (typeof chrome !== 'undefined' && chrome.storage) {
+                chrome.storage.local.clear(() => {
+                    log('storage-output', 'Storage cleared');
+                });
+            } else {
+                log('storage-output', 'Chrome storage API not available');
+            }
+        }
+        
+        function checkServiceWorker() {
+            const output = document.getElementById('extension-status');
+            
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(registrations => {
+                    log('extension-status', `Found ${registrations.length} service worker registrations`);
+                    
+                    registrations.forEach((registration, index) => {
+                        log('extension-status', `Registration ${index + 1}: ${registration.scope}`);
+                        log('extension-status', `State: ${registration.active ? registration.active.state : 'No active worker'}`);
+                    });
+                    
+                    if (registrations.length === 0) {
+                        log('extension-status', 'No service workers found. Extension may not be loaded.');
+                    }
+                }).catch(error => {
+                    log('extension-status', 'Error checking service workers: ' + error.message);
+                });
+            } else {
+                log('extension-status', 'Service Worker API not available');
+            }
+        }
+        
+        // Auto-check extension status on load
+        window.addEventListener('load', () => {
+            setTimeout(checkExtensionStatus, 1000);
+        });
+    </script>
+</body>
+</html>

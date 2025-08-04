@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gmail Label Modifier - Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-content">
+        <div class="header-left">
+          <img src="../../assets/icons/icon48.png" alt="Gmail Label Modifier" class="header-icon">
+          <div class="header-text">
+            <h1>Gmail Label Modifier</h1>
+            <p>Customize your Gmail label experience</p>
+          </div>
+        </div>
+        <div class="header-right">
+          <button id="saveSettings" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z" />
+            </svg>
+            Save Settings
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="general">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.98C19.47,12.66 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11.02L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.22,8.95 2.27,9.22 2.46,9.37L4.57,11.02C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.66 4.57,12.98L2.46,14.63C2.27,14.78 2.22,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.68 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.98Z" />
+        </svg>
+        General
+      </button>
+      <button class="nav-tab" data-tab="labels">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17.63,5.84C17.27,5.33 16.67,5 16,5L5,5.01C3.9,5.01 3,5.9 3,7V17A2,2 0 0,0 5,19H16C16.67,19 17.27,18.67 17.63,18.16L22,12L17.63,5.84Z" />
+        </svg>
+        Labels
+      </button>
+      <button class="nav-tab" data-tab="advanced">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17,20.41L18.41,19L15,15.59L13.59,17M7.5,8H11V13.59L9.79,14.8L8.2,13.2L7.5,8M12.5,8H16L15.3,13.2L13.71,14.8L12.21,13.59V8M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22A10,10 0 0,1 2,12A10,10 0 0,1 12,2M12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z" />
+        </svg>
+        Advanced
+      </button>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- General Settings Tab -->
+      <div class="tab-content active" id="general">
+        <div class="section">
+          <h2>Basic Settings</h2>
+          <div class="setting-group">
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="autoApplyLabels">Auto-apply labels to replies</label>
+                <p class="setting-description">Automatically apply labels to reply emails based on the original email's labels</p>
+              </div>
+              <div class="setting-control">
+                <label class="switch">
+                  <input type="checkbox" id="autoApplyLabels">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="showNotifications">Show notifications</label>
+                <p class="setting-description">Display notifications when labels are automatically applied</p>
+              </div>
+              <div class="setting-control">
+                <label class="switch">
+                  <input type="checkbox" id="showNotifications">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="enableDebugMode">Debug mode</label>
+                <p class="setting-description">Enable detailed logging for troubleshooting</p>
+              </div>
+              <div class="setting-control">
+                <label class="switch">
+                  <input type="checkbox" id="enableDebugMode">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Performance</h2>
+          <div class="setting-group">
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="cacheTimeout">Cache timeout (minutes)</label>
+                <p class="setting-description">How long to keep label data in cache before refreshing</p>
+              </div>
+              <div class="setting-control">
+                <input type="number" id="cacheTimeout" min="1" max="60" value="30" class="input-number">
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label for="maxCacheSize">Maximum cache size</label>
+                <p class="setting-description">Maximum number of labels to keep in cache</p>
+              </div>
+              <div class="setting-control">
+                <input type="number" id="maxCacheSize" min="100" max="10000" value="1000" class="input-number">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Labels Tab -->
+      <div class="tab-content" id="labels">
+        <div class="section">
+          <div class="section-header">
+            <h2>Custom Label Names</h2>
+            <button id="addCustomLabel" class="btn btn-secondary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" />
+              </svg>
+              Add Custom Label
+            </button>
+          </div>
+          <p class="section-description">Customize how labels appear in Gmail. You can give labels more readable names or translate them.</p>
+          
+          <div class="custom-labels-container">
+            <div id="customLabelsList" class="custom-labels-list">
+              <!-- Custom labels will be populated here -->
+            </div>
+            <div id="noCustomLabels" class="empty-state">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.63,5.84C17.27,5.33 16.67,5 16,5L5,5.01C3.9,5.01 3,5.9 3,7V17A2,2 0 0,0 5,19H16C16.67,19 17.27,18.67 17.63,18.16L22,12L17.63,5.84Z" />
+              </svg>
+              <h3>No custom labels yet</h3>
+              <p>Add custom names for your Gmail labels to make them more readable</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-header">
+            <h2>Label Order</h2>
+            <button id="resetLabelOrder" class="btn btn-secondary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12H4A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z" />
+              </svg>
+              Reset Order
+            </button>
+          </div>
+          <p class="section-description">Drag and drop to reorder how labels appear in Gmail's sidebar.</p>
+          
+          <div class="label-order-container">
+            <div id="labelOrderList" class="label-order-list">
+              <!-- Label order will be populated here -->
+            </div>
+            <div id="noLabelsOrder" class="empty-state">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z" />
+              </svg>
+              <h3>No labels found</h3>
+              <p>Labels will appear here once you start using Gmail with this extension</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Advanced Tab -->
+      <div class="tab-content" id="advanced">
+        <div class="section">
+          <h2>Data Management</h2>
+          <div class="setting-group">
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Export Settings</label>
+                <p class="setting-description">Download your current settings as a backup file</p>
+              </div>
+              <div class="setting-control">
+                <button id="exportSettings" class="btn btn-secondary">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                  </svg>
+                  Export
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Import Settings</label>
+                <p class="setting-description">Restore settings from a backup file</p>
+              </div>
+              <div class="setting-control">
+                <input type="file" id="importFile" accept=".json" style="display: none;">
+                <button id="importSettings" class="btn btn-secondary">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z" />
+                  </svg>
+                  Import
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Clear Cache</label>
+                <p class="setting-description">Clear all cached label data (will be rebuilt automatically)</p>
+              </div>
+              <div class="setting-control">
+                <button id="clearCache" class="btn btn-warning">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z" />
+                  </svg>
+                  Clear Cache
+                </button>
+              </div>
+            </div>
+
+            <div class="setting-item">
+              <div class="setting-info">
+                <label>Reset All Settings</label>
+                <p class="setting-description">Reset all settings to default values (cannot be undone)</p>
+              </div>
+              <div class="setting-control">
+                <button id="resetSettings" class="btn btn-danger">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12,4V1L8,5L12,9V6A6,6 0 0,1 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12H4A8,8 0 0,0 12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4Z" />
+                  </svg>
+                  Reset All
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>About</h2>
+          <div class="about-info">
+            <div class="about-item">
+              <strong>Version:</strong>
+              <span id="extensionVersion">1.0.0</span>
+            </div>
+            <div class="about-item">
+              <strong>Last Updated:</strong>
+              <span id="lastUpdated">-</span>
+            </div>
+            <div class="about-item">
+              <strong>Cache Size:</strong>
+              <span id="cacheSize">-</span>
+            </div>
+            <div class="about-item">
+              <strong>Total Labels:</strong>
+              <span id="totalLabelsCount">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner">
+      <svg width="24" height="24" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-dasharray="31.416" stroke-dashoffset="31.416">
+          <animate attributeName="stroke-dasharray" dur="2s" values="0 31.416;15.708 15.708;0 31.416" repeatCount="indefinite"/>
+          <animate attributeName="stroke-dashoffset" dur="2s" values="0;-15.708;-31.416" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+    </div>
+    <p>Loading...</p>
+  </div>
+
+  <!-- Custom Label Modal -->
+  <div id="customLabelModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="modalTitle">Add Custom Label</h3>
+        <button id="closeModal" class="modal-close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="originalLabelName">Original Label Name</label>
+          <input type="text" id="originalLabelName" placeholder="Enter the original Gmail label name" class="form-input">
+        </div>
+        <div class="form-group">
+          <label for="customLabelName">Custom Display Name</label>
+          <input type="text" id="customLabelName" placeholder="Enter the custom name to display" class="form-input">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelModal" class="btn btn-secondary">Cancel</button>
+        <button id="saveCustomLabel" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

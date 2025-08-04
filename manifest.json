@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "Gmail Label Manager",
+  "version": "1.0.0",
+  "description": "Automatically apply labels to reply emails and customize Gmail label display and ordering",
+  
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  
+  "host_permissions": [
+    "https://mail.google.com/*"
+  ],
+  
+  "background": {
+    "service_worker": "src/background/background.js"
+  },
+  
+  "content_scripts": [{
+    "matches": ["https://mail.google.com/mail/*"],
+    "js": [
+      "src/shared/constants.js",
+      "src/shared/utils.js",
+      "src/shared/storage.js",
+      "src/content/gmail-interceptor.js",
+      "src/content/dom-observer.js",
+      "src/content/content.js"
+    ],
+    "run_at": "document_idle"
+  }],
+  
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_title": "Gmail Label Manager",
+    "default_icon": {
+      "16": "assets/icons/icon16.svg",
+      "32": "assets/icons/icon32.svg",
+      "48": "assets/icons/icon48.svg",
+      "128": "assets/icons/icon128.svg"
+    }
+  },
+  
+  "options_page": "src/options/options.html",
+  
+  "icons": {
+    "16": "assets/icons/icon16.svg",
+    "32": "assets/icons/icon32.svg",
+    "48": "assets/icons/icon48.svg",
+    "128": "assets/icons/icon128.svg"
+  },
+  
+  "web_accessible_resources": [{
+    "resources": ["assets/*"],
+    "matches": ["https://mail.google.com/*"]
+  }]
+}
