@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gmail Label Manager - Settings</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #f8f9fa;
+      color: #202124;
+    }
+    
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    
+    .header {
+      background: white;
+      padding: 24px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .header h1 {
+      margin: 0 0 8px 0;
+      font-size: 28px;
+      font-weight: 400;
+      color: #1a73e8;
+    }
+    
+    .header p {
+      margin: 0;
+      color: #5f6368;
+      font-size: 16px;
+    }
+    
+    .section {
+      background: white;
+      border-radius: 12px;
+      margin-bottom: 24px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .section-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid #e8eaed;
+      background: #f8f9fa;
+    }
+    
+    .section-header h2 {
+      margin: 0 0 4px 0;
+      font-size: 18px;
+      font-weight: 500;
+    }
+    
+    .section-header p {
+      margin: 0;
+      color: #5f6368;
+      font-size: 14px;
+    }
+    
+    .section-content {
+      padding: 24px;
+    }
+    
+    .setting-group {
+      margin-bottom: 24px;
+    }
+    
+    .setting-group:last-child {
+      margin-bottom: 0;
+    }
+    
+    .setting-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 0;
+      border-bottom: 1px solid #f1f3f4;
+    }
+    
+    .setting-item:last-child {
+      border-bottom: none;
+    }
+    
+    .setting-info {
+      flex: 1;
+    }
+    
+    .setting-title {
+      font-size: 16px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    
+    .setting-description {
+      font-size: 14px;
+      color: #5f6368;
+      line-height: 1.4;
+    }
+    
+    .setting-control {
+      margin-left: 16px;
+    }
+    
+    .toggle-switch {
+      position: relative;
+      width: 48px;
+      height: 24px;
+      background-color: #dadce0;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    
+    .toggle-switch.active {
+      background-color: #1a73e8;
+    }
+    
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background-color: white;
+      border-radius: 50%;
+      transition: transform 0.3s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    
+    .toggle-switch.active::after {
+      transform: translateX(24px);
+    }
+    
+    .select-control {
+      padding: 8px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      background: white;
+      font-size: 14px;
+      min-width: 150px;
+    }
+    
+    .label-management {
+      margin-top: 16px;
+    }
+    
+    .label-list {
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid #e8eaed;
+      border-radius: 8px;
+    }
+    
+    .label-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid #f1f3f4;
+    }
+    
+    .label-item:last-child {
+      border-bottom: none;
+    }
+    
+    .label-original {
+      flex: 1;
+      font-size: 14px;
+      color: #202124;
+    }
+    
+    .label-custom {
+      flex: 1;
+      margin: 0 16px;
+    }
+    
+    .label-custom input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    .label-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .btn {
+      padding: 6px 12px;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      background: white;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn:hover {
+      background: #f8f9fa;
+    }
+    
+    .btn.primary {
+      background: #1a73e8;
+      color: white;
+      border-color: #1a73e8;
+    }
+    
+    .btn.primary:hover {
+      background: #1557b0;
+    }
+    
+    .btn.danger {
+      background: #ea4335;
+      color: white;
+      border-color: #ea4335;
+    }
+    
+    .btn.danger:hover {
+      background: #d33b2c;
+    }
+    
+    .search-box {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #5f6368;
+    }
+    
+    .loading {
+      text-align: center;
+      padding: 40px 20px;
+      color: #5f6368;
+    }
+    
+    .save-section {
+      position: sticky;
+      bottom: 0;
+      background: white;
+      padding: 16px 24px;
+      border-top: 1px solid #e8eaed;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+    
+    .save-btn {
+      padding: 10px 24px;
+      background: #1a73e8;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    
+    .save-btn:hover {
+      background: #1557b0;
+    }
+    
+    .save-btn:disabled {
+      background: #dadce0;
+      cursor: not-allowed;
+    }
+    
+    .reset-btn {
+      padding: 10px 24px;
+      background: white;
+      color: #5f6368;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .reset-btn:hover {
+      background: #f8f9fa;
+    }
+    
+    /* 拖拽排序样式 */
+    .label-list {
+      min-height: 200px;
+    }
+    
+    .label-item {
+      cursor: move;
+      transition: all 0.2s ease;
+    }
+    
+    .label-item:hover {
+      background: #f8f9fa;
+    }
+    
+    .label-item.dragging {
+      opacity: 0.5;
+      transform: rotate(5deg);
+    }
+    
+    .label-item.drag-over {
+      border-top: 2px solid #1a73e8;
+    }
+    
+    .drag-handle {
+      cursor: grab;
+      color: #5f6368;
+      margin-right: 8px;
+      font-size: 16px;
+    }
+    
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+    
+    /* 标签分组样式 */
+    .label-section {
+      margin: 16px 0 8px 0;
+    }
+    
+    .label-section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #5f6368;
+      margin: 0 0 8px 0;
+      padding: 8px 16px;
+      background: #f8f9fa;
+      border-bottom: 1px solid #e8eaed;
+    }
+    
+    /* 标签信息和标识样式 */
+    .label-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    
+    .label-original {
+      font-size: 14px;
+      color: #202124;
+      font-weight: 500;
+    }
+    
+    .label-badges {
+      display: flex;
+      gap: 6px;
+    }
+    
+    .label-type-badge {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 12px;
+      font-weight: 500;
+      text-transform: uppercase;
+    }
+    
+    .label-type-badge.user {
+      background: #e8f0fe;
+      color: #1a73e8;
+    }
+    
+    .label-type-badge.system {
+      background: #fce8e6;
+      color: #d93025;
+    }
+    
+    .label-hidden-badge {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 12px;
+      background: #f9ab00;
+      color: white;
+      font-weight: 500;
+      text-transform: uppercase;
+    }
+    
+    /* 系统标签特殊样式 */
+    .label-item.system-label {
+      background: #fef7f0;
+    }
+    
+    .label-item.system-label:hover {
+      background: #fef1e8;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>Gmail Label Manager Settings</h1>
+      <p>Configure your label management preferences and customize label names</p>
+    </div>
+    
+    <!-- General Settings -->
+    <div class="section">
+      <div class="section-header">
+        <h2>General Settings</h2>
+        <p>Configure how the extension behaves when managing labels</p>
+      </div>
+      <div class="section-content">
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">Auto-apply labels to replies</div>
+              <div class="setting-description">
+                Automatically apply labels from the original email to reply emails
+              </div>
+            </div>
+            <div class="setting-control">
+              <div id="autoApplyToggle" class="toggle-switch"></div>
+            </div>
+          </div>
+          
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">Label application mode</div>
+              <div class="setting-description">
+                Choose how labels should be applied to reply emails
+              </div>
+            </div>
+            <div class="setting-control">
+              <select id="labelApplicationMode" class="select-control">
+                <option value="auto">Auto-apply without confirmation</option>
+                <option value="confirm">Show confirmation dialog</option>
+                <option value="manual">Manual application only</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">Enable drag & drop reordering</div>
+              <div class="setting-description">
+                Allow reordering labels in Gmail sidebar by dragging
+              </div>
+            </div>
+            <div class="setting-control">
+              <div id="dragDropToggle" class="toggle-switch"></div>
+            </div>
+          </div>
+          
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">Notification style</div>
+              <div class="setting-description">
+                Choose how to display notifications when labels are applied
+              </div>
+            </div>
+            <div class="setting-control">
+              <select id="notificationStyle" class="select-control">
+                <option value="popup">Popup notification</option>
+                <option value="inline">Inline message</option>
+                <option value="none">No notification</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Label Management -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Label Management</h2>
+        <p>Customize label display names and manage label visibility</p>
+      </div>
+      <div class="section-content">
+        <div class="label-management">
+          <input type="text" id="labelSearch" class="search-box" placeholder="Search labels...">
+          
+          <div id="labelListContainer">
+            <div id="labelListLoading" class="loading">
+              Loading Gmail labels...
+            </div>
+            
+            <div id="labelList" class="label-list" style="display: none;">
+              <!-- Labels will be populated here -->
+            </div>
+            
+            <div id="labelListEmpty" class="empty-state" style="display: none;">
+              <p>No Gmail labels found.</p>
+              <p>Make sure you have labels in your Gmail account and the extension has proper permissions.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Save Section -->
+    <div class="save-section">
+      <button id="resetBtn" class="reset-btn">Reset to Defaults</button>
+      <button id="saveBtn" class="save-btn">Save Changes</button>
+    </div>
+  </div>
+  
+  <script src="options.js"></script>
+</body>
+</html>
