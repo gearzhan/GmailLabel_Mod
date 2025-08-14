@@ -5,7 +5,9 @@
   "description": "智能Gmail标签管理器，支持自动标签继承和自定义排序",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "https://mail.google.com/*"
@@ -13,7 +15,8 @@
   "content_scripts": [{
     "matches": ["https://mail.google.com/*"],
     "js": ["content.js"],
-    "css": ["styles.css"]
+    "run_at": "document_idle",
+    "all_frames": true
   }],
   "background": {
     "service_worker": "background.js"

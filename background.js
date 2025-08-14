@@ -9,11 +9,8 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log('Gmail Label Manager installed');
   
   // 初始化默认配置
-  const defaultConfig = {
+    const defaultConfig = {
     userConfig: {
-      autoApplyLabels: true,
-      showConfirmation: false,
-      notificationStyle: 'popup', // 'popup' | 'inline' | 'none'
       enableDragAndDrop: true
     },
     customLabels: {},
@@ -85,7 +82,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function handleGetConfig(sendResponse) {
   try {
     const result = await chrome.storage.sync.get(['userConfig', 'customLabels', 'labelOrder']);
-    sendResponse({ success: true, data: result });
+
+    // 兼容旧版本，填充默认字段
+    const merged = {
+      userConfig: {
+        enableDragAndDrop: true,
+        ...(result.userConfig || {})
+      },
+      customLabels: result.customLabels || {},
+      labelOrder: result.labelOrder || { orderedLabelIds: [], lastModified: Date.now() }
+    };
+
+    // 回写存储，保证后续读取到完整结构
+    await chrome.storage.sync.set(merged);
+
+    sendResponse({ success: true, data: merged });
   } catch (error) {
     console.error('Error getting config:', error);
     sendResponse({ success: false, error: error.message });
@@ -155,19 +166,46 @@ async function handleGetGmailLabels(sendResponse) {
       return;
     }
     
-    // 向第一个Gmail标签页请求标签数据
-    const gmailTab = tabs[0];
+    // 选择一个加载完成且可用的Gmail标签页
+    const gmailTab = tabs.find(t => t.status === 'complete') || tabs[0];
     
     chrome.tabs.sendMessage(gmailTab.id, {
       action: 'getLabels'
     }, (response) => {
       if (chrome.runtime.lastError) {
         console.error('Error getting labels from content script:', chrome.runtime.lastError);
-        sendResponse({ 
-          success: false, 
-          error: 'Failed to communicate with Gmail page. Please refresh Gmail and try again.' 
-        });
-        return;
+        // 尝试在该tab主动注入content脚本（某些情况下未匹配到frame）
+        try {
+          chrome.scripting.executeScript({
+            target: { tabId: gmailTab.id, allFrames: true },
+            files: ['content.js']
+          }, () => {
+            if (chrome.runtime.lastError) {
+              sendResponse({
+                success: false,
+                error: 'Failed to communicate with Gmail page. Please refresh Gmail and try again.'
+              });
+            } else {
+              // 再次尝试，限定仅顶层 frame 响应
+              chrome.tabs.sendMessage(gmailTab.id, { action: 'getLabels' }, (retryResponse) => {
+                if (chrome.runtime.lastError || !retryResponse?.success) {
+                  sendResponse({
+                    success: false,
+                    error: retryResponse?.error || 'Failed to get labels after reinjection.'
+                  });
+                } else {
+                  sendResponse({ success: true, labels: retryResponse.labels });
+                }
+              });
+            }
+          });
+        } catch (e) {
+          sendResponse({ 
+            success: false, 
+            error: 'Failed to communicate with Gmail page. Please refresh Gmail and try again.' 
+          });
+        }
+        return true; // keep port open while reinjecting
       }
       
       if (response && response.success) {
@@ -259,13 +297,21 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
   // 通知所有content scripts配置已更新
   chrome.tabs.query({ url: 'https://mail.google.com/*' }, (tabs) => {
     tabs.forEach(tab => {
-      chrome.tabs.sendMessage(tab.id, {
-        action: 'configUpdated',
-        changes: changes
-      }).catch(error => {
-        // 忽略无法发送消息的错误（页面可能还未加载content script）
-        console.log('Could not send message to tab:', tab.id);
-      });
+      try {
+        chrome.tabs.sendMessage(tab.id, {
+          action: 'configUpdated',
+          changes: changes
+        }, () => {
+          // 如果发送失败（例如页面未注入content script），忽略错误
+          // 仅在调试时记录
+          if (chrome.runtime.lastError) {
+            // console.debug('Could not send message to tab:', tab.id, chrome.runtime.lastError.message);
+          }
+        });
+      } catch (e) {
+        // 在极少数情况下，调用本身会抛出同步错误
+        // 忽略即可
+      }
     });
   });
 });

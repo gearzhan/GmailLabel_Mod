@@ -50,18 +50,19 @@ async function loadConfiguration() {
 /**
  * 加载Gmail标签（从Gmail页面获取真实数据）
  */
-async function loadGmailLabels() {
+async function loadGmailLabels(retry = 0) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage({ action: 'getGmailLabels' }, (response) => {
       if (chrome.runtime.lastError) {
         console.error('Error loading Gmail labels:', chrome.runtime.lastError);
-        // 如果无法获取真实数据，使用空数组
-        gmailLabels = [];
-        reject(chrome.runtime.lastError);
+        // 如果无法获取真实数据，使用空数组但不报错，交给 UI 展示 empty 状态
+        gmailLabels = buildFallbackLabelsFromConfig(currentConfig);
+        resolve(gmailLabels);
         return;
       }
       
-      if (response.success && response.labels) {
+      if (response && response.success) {
+        if (Array.isArray(response.labels) && response.labels.length > 0) {
         // 处理从Gmail获取的标签数据，确保格式正确
         gmailLabels = response.labels.map(label => {
           // 如果标签对象已经有正确的格式，直接使用
@@ -85,16 +86,54 @@ async function loadGmailLabels() {
           return null;
         }).filter(label => label !== null); // 过滤掉无效标签
         
-        console.log('Gmail labels loaded from Gmail page:', gmailLabels);
-        resolve(gmailLabels);
+          console.log('Gmail labels loaded from Gmail page:', gmailLabels);
+          resolve(gmailLabels);
+        } else {
+          // 成功响应但无数据，可能是Gmail尚未渲染完成；短暂重试几次
+          if (retry < 3) {
+            setTimeout(() => {
+              loadGmailLabels(retry + 1).then(resolve).catch(reject);
+            }, 800);
+            return;
+          }
+          console.warn('Gmail labels response is empty; using fallback after retries');
+          gmailLabels = buildFallbackLabelsFromConfig(currentConfig);
+          resolve(gmailLabels);
+        }
       } else {
-        console.warn('Failed to load Gmail labels:', response.error);
-        // 如果获取失败，使用空数组但不报错
-        gmailLabels = [];
+        const errorMsg = response && response.error ? response.error : 'Unknown error or empty response';
+        console.warn('Failed to load Gmail labels:', errorMsg);
+        // 如果获取失败，使用配置构建的回退数据，保证选项页可用
+        gmailLabels = buildFallbackLabelsFromConfig(currentConfig);
         resolve(gmailLabels);
       }
     });
   });
+}
+
+/**
+ * 当无法从Gmail页面读取标签时，根据当前配置构造一个可工作的回退列表
+ */
+function buildFallbackLabelsFromConfig(config) {
+  const result = [];
+  if (!config) return result;
+
+  // 常见系统标签（仅用于展示，不保证完整）
+  const system = ['Inbox','Starred','Snoozed','Sent','Drafts'];
+  system.forEach(name => result.push({ id: name, name, type: 'system', tooltip: name }));
+
+  // 从自定义名称和排序中推断用户标签
+  const userSet = new Set();
+  const ordered = config?.labelOrder?.orderedLabelIds || [];
+  ordered.forEach(name => userSet.add(name));
+  const custom = config?.customLabels || {};
+  Object.keys(custom).forEach(name => userSet.add(name));
+
+  Array.from(userSet).forEach(name => {
+    result.push({ id: name, name, type: 'user', tooltip: name });
+  });
+
+  return result;
 }
 
 /**
@@ -107,23 +146,13 @@ function setupEventListeners() {
   const dragDropToggle = document.getElementById('dragDropToggle');
   const notificationStyle = document.getElementById('notificationStyle');
   
-  autoApplyToggle.addEventListener('click', () => {
-    toggleSetting('autoApplyLabels', autoApplyToggle);
-  });
-  
-  labelApplicationMode.addEventListener('change', (e) => {
-    updateSetting('labelApplicationMode', e.target.value);
-    // 根据选择的模式更新相关设置
-    updateLabelModeSettings(e.target.value);
-  });
+  // 移除自动应用相关事件（功能已取消）
   
   dragDropToggle.addEventListener('click', () => {
     toggleSetting('enableDragAndDrop', dragDropToggle);
   });
   
-  notificationStyle.addEventListener('change', (e) => {
-    updateSetting('notificationStyle', e.target.value);
-  });
+  // 通知样式设置也已移除
   
   // 搜索框事件
   const labelSearch = document.getElementById('labelSearch');
@@ -234,20 +263,7 @@ function updateUI() {
   // 更新切换开关状态
   const userConfig = currentConfig.userConfig || {};
   
-  updateToggleState(
-    document.getElementById('autoApplyToggle'),
-    userConfig.autoApplyLabels
-  );
-  
-  // 更新标签应用模式选择
-  const labelApplicationMode = document.getElementById('labelApplicationMode');
-  if (userConfig.autoApplyLabels === false) {
-    labelApplicationMode.value = 'manual';
-  } else if (userConfig.requireConfirmation === true) {
-    labelApplicationMode.value = 'confirm';
-  } else {
-    labelApplicationMode.value = 'auto';
-  }
+  // 已移除自动应用设置
   
   updateToggleState(
     document.getElementById('dragDropToggle'),
@@ -255,11 +271,14 @@ function updateUI() {
   );
   
   // 更新下拉选择
-  const notificationStyle = document.getElementById('notificationStyle');
-  notificationStyle.value = userConfig.notificationStyle || 'popup';
+  // 已移除通知样式设置
   
   // 更新标签列表
   updateLabelList();
+
+  // 根据是否加载到标签显示/隐藏空状态
+  const loadingElement = document.getElementById('labelListLoading');
+  if (loadingElement) loadingElement.style.display = 'none';
 }
 
 /**
@@ -296,25 +315,47 @@ function updateLabelList() {
   // 清空现有列表
   listElement.innerHTML = '';
   
-  // 显示所有标签（包括系统标签和用户标签）
-  let allLabels = gmailLabels;
+  // 显示所有标签（包括系统标签和用户标签）。优先使用原始名字段
+  let allLabels = gmailLabels.map(l => ({
+    id: l.id || l.name || l.originalName,
+    name: l.originalName || l.name,
+    type: l.type || 'user',
+    tooltip: l.tooltip || (l.originalName || l.name)
+  }));
+  // 去重：同名只保留一次
+  const uniqueMap = new Map();
+  allLabels.forEach(lbl => { if (!uniqueMap.has(lbl.name)) uniqueMap.set(lbl.name, lbl); });
+  allLabels = Array.from(uniqueMap.values());
   
   // 按保存的顺序排序标签
   if (currentConfig.labelOrder && currentConfig.labelOrder.orderedLabelIds) {
     const orderedIds = currentConfig.labelOrder.orderedLabelIds;
-    const labelMap = new Map(allLabels.map(label => [label.name, label]));
-    
-    // 先添加已排序的标签
-    const sortedLabels = [];
-    orderedIds.forEach(labelName => {
-      if (labelMap.has(labelName)) {
-        sortedLabels.push(labelMap.get(labelName));
-        labelMap.delete(labelName);
+    // 允许用“自定义名或原名”匹配排序
+    const labelMap = new Map();
+    allLabels.forEach(label => {
+      labelMap.set(label.name, label);
+      const custom = currentConfig.customLabels?.[label.name];
+      if (custom?.customName) {
+        labelMap.set(custom.customName, label);
       }
     });
-    
-    // 添加新的未排序标签
-    const remainingLabels = Array.from(labelMap.values());
+
+    // 先添加已排序的标签，按“原始名”去重
+    const sortedLabels = [];
+    const addedNames = new Set();
+    orderedIds.forEach(labelName => {
+      const found = labelMap.get(labelName);
+      if (found && !addedNames.has(found.name)) {
+        sortedLabels.push(found);
+        addedNames.add(found.name);
+      }
+    });
+
+    // 添加新的未排序标签（去重）
+    const remainingLabels = [];
+    Array.from(new Set(labelMap.values())).forEach(label => {
+      if (!addedNames.has(label.name)) remainingLabels.push(label);
+    });
     allLabels = [...sortedLabels, ...remainingLabels];
   }
   
@@ -327,11 +368,13 @@ function updateLabelList() {
     const userSection = document.createElement('div');
     userSection.className = 'label-section';
     userSection.innerHTML = '<h3 class="label-section-title">User Labels</h3>';
+    const userContainer = document.createElement('div');
+    userSection.appendChild(userContainer);
     listElement.appendChild(userSection);
     
     userLabels.forEach(label => {
       const labelItem = createLabelItem(label);
-      listElement.appendChild(labelItem);
+      userContainer.appendChild(labelItem);
     });
   }
   
@@ -340,12 +383,14 @@ function updateLabelList() {
     const systemSection = document.createElement('div');
     systemSection.className = 'label-section';
     systemSection.innerHTML = '<h3 class="label-section-title">System Labels</h3>';
+    const systemContainer = document.createElement('div');
+    systemSection.appendChild(systemContainer);
     listElement.appendChild(systemSection);
     
     systemLabels.forEach(label => {
       const labelItem = createLabelItem(label);
       labelItem.classList.add('system-label');
-      listElement.appendChild(labelItem);
+      systemContainer.appendChild(labelItem);
     });
   }
 }
@@ -359,7 +404,8 @@ function createLabelItem(label) {
   item.setAttribute('data-label-id', label.id || label.name);
   item.setAttribute('data-label-name', label.name);
   item.setAttribute('data-label-type', label.type || 'user');
-  item.draggable = true;
+  const isSystem = (label.type || 'user') === 'system';
+  item.draggable = !isSystem;
   
   const customLabel = currentConfig.customLabels?.[label.name] || {};
   const customName = customLabel.customName || '';
@@ -369,28 +415,43 @@ function createLabelItem(label) {
   const hiddenIndicator = label.isHidden ? '<span class="label-hidden-badge">Hidden</span>' : '';
   
   item.innerHTML = `
-    <div class="drag-handle">⋮⋮</div>
+    <div class="drag-handle" style="${isSystem ? 'visibility:hidden;' : ''}">⋮⋮</div>
     <div class="label-info">
       <div class="label-original">${label.name}</div>
       <div class="label-badges">${typeIndicator}${hiddenIndicator}</div>
     </div>
     <div class="label-custom">
-      <input type="text" value="${customName}" placeholder="Custom name (optional)" 
+      <input type="text" value="${customName}" ${isSystem ? 'disabled' : ''}
+             placeholder="${isSystem ? 'System label (locked)' : 'Custom name (optional)'}" 
              data-label-name="${label.name}">
     </div>
   `;
   
   // 添加输入框事件监听
   const input = item.querySelector('input');
-  input.addEventListener('input', (e) => {
+  if (!isSystem) {
+    input.addEventListener('input', (e) => {
     const originalName = e.target.getAttribute('data-label-name');
     const customName = e.target.value;
     updateLabelCustomName(originalName, customName);
     markUnsavedChanges();
-  });
+    });
+  }
+
+  // 若一个“自定义名”对应多个条目，只显示第一条，其余隐藏
+  if (!isSystem && customName) {
+    const existing = document.querySelector(
+      `.label-item input[value="${customName.replace(/"/g, '\\"')}"]`
+    );
+    if (existing && existing !== input) {
+      item.style.display = 'none';
+    }
+  }
   
   // 添加拖拽事件监听
-  setupDragAndDrop(item);
+  if (!isSystem) {
+    setupDragAndDrop(item);
+  }
   
   return item;
 }
@@ -455,15 +516,16 @@ function handleDrop(e) {
   }
   
   if (draggedElement !== this) {
-    const labelList = document.getElementById('labelList');
-    const allItems = Array.from(labelList.children);
+    // 在同一分组容器内移动
+    const group = this.parentNode; // .label-section 内部的 div 容器
+    const allItems = Array.from(group.querySelectorAll('.label-item'));
     const draggedIndex = allItems.indexOf(draggedElement);
     const targetIndex = allItems.indexOf(this);
     
     if (draggedIndex < targetIndex) {
-      this.parentNode.insertBefore(draggedElement, this.nextSibling);
+      group.insertBefore(draggedElement, this.nextSibling);
     } else {
-      this.parentNode.insertBefore(draggedElement, this);
+      group.insertBefore(draggedElement, this);
     }
     
     // 更新标签顺序
@@ -495,9 +557,16 @@ function handleDragEnd(e) {
  */
 function updateLabelOrder() {
   const labelList = document.getElementById('labelList');
-  const orderedLabelNames = Array.from(labelList.children)
-    .filter(item => item.classList.contains('label-item')) // 只获取标签项，排除分组标题
-    .map(item => item.getAttribute('data-label-name'));
+  // 只读取每个分组容器里的标签项，避免把两个分组混在一起
+  const groupContainers = Array.from(labelList.querySelectorAll('.label-section > div'));
+  const orderedLabelNames = [];
+  groupContainers.forEach(group => {
+    const items = Array.from(group.querySelectorAll('.label-item'));
+    items.forEach(item => {
+      const name = item.getAttribute('data-label-name');
+      if (name) orderedLabelNames.push(name);
+    });
+  });
   
   if (!currentConfig.labelOrder) {
     currentConfig.labelOrder = {};
@@ -760,6 +829,7 @@ async function resetToDefaults() {
     userConfig: {
       autoApplyLabels: true,
       showConfirmation: false,
+      requireConfirmation: false,
       notificationStyle: 'popup',
       enableDragAndDrop: true
     },
@@ -772,9 +842,24 @@ async function resetToDefaults() {
   
   // 更新UI
   updateUI();
-  markUnsavedChanges();
   
-  showSuccess('Settings reset to defaults. Click "Save Changes" to apply.');
+  // 直接保存并刷新Gmail，让用户立刻看到恢复效果
+  try {
+    await saveConfiguration(currentConfig.userConfig);
+    await saveCustomLabels({});
+    await saveLabelOrder([]);
+    await refreshGmailPages();
+    // 等待Gmail刷新完成后重新拉取标签，避免列表残留旧名字
+    await new Promise(r => setTimeout(r, 1200));
+    await loadGmailLabels();
+    updateLabelList();
+    clearUnsavedChanges();
+    showSuccess('Settings reset to defaults and applied to Gmail.');
+  } catch (e) {
+    // 如果自动保存失败，则仍允许用户手动保存
+    markUnsavedChanges();
+    showError('Failed to auto-apply defaults. Please click "Save Changes". ' + e.message);
+  }
 }
 
 /**

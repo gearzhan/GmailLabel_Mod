@@ -4,9 +4,27 @@
 /**
  * 全局变量和配置
  */
-let extensionConfig = null;
-let isGmailLoaded = false;
-let labelObserver = null;
+var extensionConfig = null;
+var isGmailLoaded = false;
+var labelObserver = null;
+// 初始化全局命名空间，避免未定义引用
+window.gmailLabelManager = window.gmailLabelManager || {};
+
+/**
+ * 简单防抖工具，避免频繁的DOM变更触发导致卡顿与延迟
+ */
+function debounce(fn, delay) {
+  let timerId = null;
+  return function debounced(...args) {
+    if (timerId) {
+      clearTimeout(timerId);
+    }
+    timerId = setTimeout(() => {
+      timerId = null;
+      fn.apply(this, args);
+    }, delay);
+  };
+}
 
 /**
  * 初始化函数 - 页面加载完成后执行
@@ -39,8 +57,8 @@ function waitForGmailLoad() {
       console.log('Gmail interface loaded');
       setupExtension();
     } else if (!isGmailLoaded) {
-      // 如果Gmail还未加载，继续等待
-      setTimeout(checkGmailLoad, 1000);
+      // 更短的轮询间隔，加快初始化
+      setTimeout(checkGmailLoad, 250);
     }
   };
   
@@ -69,6 +87,9 @@ async function setupExtension() {
       initializeLabelDragAndDrop();
     }
     
+    // 初始应用一次，减少等待
+    handleLabelListChange();
+
     // 延迟执行标签检测测试
     setTimeout(() => {
       testLabelDetection();
@@ -118,81 +139,12 @@ function detectReplyAction() {
 /**
  * 监听回复操作
  */
-function setupReplyDetection() {
-  // 监听回复按钮点击
-  document.addEventListener('click', function(event) {
-    const target = event.target;
-    
-    // 检查是否点击了回复相关按钮
-    const replyButtonSelectors = [
-      '[data-tooltip="回复"]',
-      '[data-tooltip="Reply"]',
-      '.T-I.J-J5-Ji.T-I-Js-Gs.aaq.T-I-ax7.L3'
-    ];
-    
-    let isReplyButton = false;
-    replyButtonSelectors.forEach(selector => {
-      if (target.matches(selector) || target.closest(selector)) {
-        isReplyButton = true;
-      }
-    });
-    
-    if (isReplyButton) {
-      console.log('检测到回复操作');
-      
-      // 延迟检测原邮件标签，等待DOM更新
-      setTimeout(() => {
-        const originalLabels = detectOriginalEmailLabels();
-        console.log('原邮件标签:', originalLabels);
-        
-        if (originalLabels.length > 0) {
-          // 触发标签应用逻辑
-          handleReplyWithLabels(originalLabels);
-        }
-      }, 1000);
-    }
-  });
-  
-  // 监听DOM变化，检测回复框出现
-  const observer = new MutationObserver(function(mutations) {
-    mutations.forEach(function(mutation) {
-      if (mutation.type === 'childList') {
-        // 检查是否有新的回复框出现
-        const replyBoxes = document.querySelectorAll('.Am.Al.editable, .editable[contenteditable="true"]');
-        if (replyBoxes.length > 0) {
-          console.log('检测到回复框出现');
-          
-          // 检测原邮件标签
-          const originalLabels = detectOriginalEmailLabels();
-          if (originalLabels.length > 0) {
-            handleReplyWithLabels(originalLabels);
-          }
-        }
-      }
-    });
-  });
-  
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true
-  });
-}
+function setupReplyDetection() {}
 
 /**
  * 处理回复邮件的标签应用
  */
-function handleReplyWithLabels(originalLabels) {
-  console.log('处理回复邮件标签应用:', originalLabels);
-  
-  // 保存原邮件标签到全局对象
-  window.gmailLabelManager.pendingLabels = originalLabels;
-  
-  // 这里可以添加自动应用标签或提示用户的逻辑
-  // 目前先记录到控制台
-  console.log('待应用的标签:', originalLabels);
-  
-  // 可以在这里添加UI提示或自动标签应用功能
-}
+function handleReplyWithLabels() {}
 
 /**
  * 测试标签检测功能
@@ -229,7 +181,6 @@ function testLabelDetection() {
   console.log('Is Replying:', isReplying);
   
   // 保存测试结果到全局对象
-  window.gmailLabelManager = window.gmailLabelManager || {};
   window.gmailLabelManager.testResults = {
     allLabels,
     currentLabels,
@@ -276,13 +227,18 @@ function setupLabelObserver() {
   if (labelContainer) {
     console.log('Setting up label observer');
     
+    const debouncedHandle = debounce(() => {
+      handleLabelListChange();
+    }, 150);
+
     labelObserver = new MutationObserver((mutations) => {
+      let shouldHandle = false;
       mutations.forEach((mutation) => {
         if (mutation.type === 'childList') {
-          // 标签列表发生变化时的处理
-          handleLabelListChange();
+          shouldHandle = true;
         }
       });
+      if (shouldHandle) debouncedHandle();
     });
     
     labelObserver.observe(labelContainer, {
@@ -302,6 +258,8 @@ function setupLabelObserver() {
 function findLabelContainer() {
   // Gmail标签通常在侧边栏中，尝试多种选择器
   const selectors = [
+    // 优先监听整个导航区域，覆盖更多变化
+    '[role="navigation"]',
     // 新版Gmail标签容器
     '[data-tooltip="Labels"]',
     '[aria-label="Labels"]',
@@ -340,7 +298,10 @@ function getAllGmailLabels() {
   const labelSelectors = [
     // 标准标签项
     '.TK .TO .nU',
-    '.aim .TO .nU', 
+    '.aim .TO .nU',
+    // 更稳健：获取侧边栏每个条目的文本
+    '.aim .nU',
+    '.TN .nU',
     // 带tooltip的标签
     '[data-tooltip] .nU',
     '[aria-label] .nU',
@@ -353,11 +314,15 @@ function getAllGmailLabels() {
     '.aim .TO[style*="display: none"] .nU'
   ];
   
+  const seen = new Set();
   labelSelectors.forEach(selector => {
     const elements = document.querySelectorAll(selector);
     elements.forEach(element => {
       const labelText = element.textContent?.trim();
-      const parentElement = element.closest('[data-tooltip], [aria-label]');
+      const parentElement = element.closest('[data-tooltip], [aria-label], .aim');
+      // 如果我们之前改过名称，这里会带有原名标记
+      const anchorNode = parentElement || element.closest('[data-tooltip], [aria-label]');
+      const originalNameAttr = anchorNode?.getAttribute('data-original-name');
       const tooltip = parentElement?.getAttribute('data-tooltip') || 
                      parentElement?.getAttribute('aria-label');
       
@@ -365,7 +330,10 @@ function getAllGmailLabels() {
       if (labelText && labelText.length > 0) {
         const labelState = detectLabelState(element, parentElement);
         const labelInfo = {
-          name: labelText,
+          // 对外返回原始名，确保选项页显示的是原名而不是被我们改过的可见名
+          name: originalNameAttr || labelText,
+          originalName: originalNameAttr || labelText,
+          displayName: labelText,
           tooltip: tooltip || labelText,
           element: element,
           parentElement: parentElement,
@@ -375,9 +343,11 @@ function getAllGmailLabels() {
           showIfUnread: labelState.showIfUnread
         };
         
-        // 避免重复添加
-        if (!labels.find(l => l.name === labelText)) {
+        // 避免重复添加（按原始名去重）
+        const key = originalNameAttr || labelText;
+        if (!seen.has(key)) {
           labels.push(labelInfo);
+          seen.add(key);
         }
       }
     });
@@ -391,7 +361,10 @@ function getAllGmailLabels() {
     }
   });
   
-  console.log('Found Gmail labels with states:', labels);
+  // 缓存，以便其它逻辑无需再次查询
+  window.gmailLabelManager = window.gmailLabelManager || {};
+  window.gmailLabelManager.allLabels = labels;
+  // console.debug('Found Gmail labels with states:', labels);
   return labels;
 }
 
@@ -554,23 +527,52 @@ function handleLabelListChange() {
  */
 function applyCustomLabelNames() {
   if (!extensionConfig?.customLabels) return;
-  
-  const labelElements = document.querySelectorAll('[data-tooltip]');
-  
-  labelElements.forEach(element => {
-    const originalName = element.getAttribute('data-tooltip');
-    const customLabel = extensionConfig.customLabels[originalName];
-    
-    if (customLabel && customLabel.customName) {
-      // 更新显示的标签名称，但保持原始tooltip
-      const textElement = element.querySelector('.TK .TO .nU');
-      if (textElement) {
-        textElement.textContent = customLabel.customName;
-        // 保存原始名称以便恢复
-        element.setAttribute('data-original-name', originalName);
-      }
+
+  try {
+    // 确保有标签缓存，没有则重新获取
+    if (!window.gmailLabelManager?.allLabels) {
+      window.gmailLabelManager = window.gmailLabelManager || {};
+      window.gmailLabelManager.allLabels = getAllGmailLabels();
     }
-  });
+
+    const allLabels = window.gmailLabelManager.allLabels || [];
+
+    allLabels.forEach(labelInfo => {
+      if (!labelInfo || !labelInfo.element) return;
+
+      const keyCandidates = [labelInfo.name, labelInfo.tooltip].filter(Boolean);
+      let customLabel = null;
+      for (const key of keyCandidates) {
+        if (extensionConfig.customLabels[key]) {
+          customLabel = extensionConfig.customLabels[key];
+          break;
+        }
+      }
+
+      const anchor = labelInfo.parentElement || labelInfo.element.closest('[data-tooltip], [aria-label]');
+
+      if (customLabel && customLabel.customName) {
+        // 更稳健地定位可见文本节点
+        const textNode = labelInfo.element.querySelector('.nU') || labelInfo.element;
+        textNode.textContent = customLabel.customName;
+        if (anchor) {
+          anchor.setAttribute('data-original-name', labelInfo.name);
+        }
+      } else {
+        // 没有自定义名时，恢复为原名（如果之前被改过）
+        const textNode = labelInfo.element.querySelector('.nU') || labelInfo.element;
+        const currentText = textNode?.textContent?.trim();
+        if (currentText && currentText !== labelInfo.name) {
+          textNode.textContent = labelInfo.name;
+        }
+        if (anchor && anchor.hasAttribute('data-original-name')) {
+          anchor.removeAttribute('data-original-name');
+        }
+      }
+    });
+  } catch (e) {
+    console.warn('applyCustomLabelNames failed:', e);
+  }
 }
 
 /**
@@ -578,9 +580,71 @@ function applyCustomLabelNames() {
  */
 function applyLabelOrder() {
   if (!extensionConfig?.labelOrder?.orderedLabelIds?.length) return;
-  
-  // 这里将在后续版本中实现标签重排序功能
-  console.log('Label order application will be implemented in next phase');
+
+  try {
+    const ordered = extensionConfig.labelOrder.orderedLabelIds;
+    const allLabels = getAllGmailLabels();
+
+    // 仅对用户自定义标签进行排序，避免干扰系统标签
+    const userLabels = allLabels.filter(l => l.type === 'user');
+
+    // 映射名称到可移动的节点
+    const nameToNode = new Map();
+    userLabels.forEach(labelInfo => {
+      const node = getSidebarItemNode(labelInfo);
+      if (node) {
+        nameToNode.set(labelInfo.name, node);
+        // 允许以自定义名匹配
+        const custom = extensionConfig?.customLabels?.[labelInfo.name];
+        if (custom?.customName) {
+          nameToNode.set(custom.customName, node);
+        }
+      }
+    });
+
+    // 找到共同的父容器
+    const firstNode = nameToNode.get(ordered.find(n => nameToNode.has(n)));
+    if (!firstNode) return;
+    const parent = firstNode.parentElement;
+    if (!parent) return;
+
+    // 仅移动在同一父容器下的节点
+    ordered.forEach(name => {
+      const node = nameToNode.get(name);
+      if (node && node.parentElement === parent) {
+        parent.appendChild(node);
+      }
+    });
+
+    // 更新缓存
+    window.gmailLabelManager = window.gmailLabelManager || {};
+    window.gmailLabelManager.allLabels = allLabels;
+
+    console.log('Applied label order to Gmail sidebar');
+  } catch (e) {
+    console.warn('applyLabelOrder failed:', e);
+  }
+}
+
+/**
+ * 获取侧边栏中某个标签的列表项节点（用于重排）
+ */
+function getSidebarItemNode(labelInfo) {
+  if (!labelInfo) return null;
+  const candidates = [
+    labelInfo.element,
+    labelInfo.parentElement,
+  ].filter(Boolean);
+  for (const el of candidates) {
+    const item = el.closest('.aim');
+    if (item) return item;
+  }
+  // 兜底：尝试更泛的容器
+  for (const el of candidates) {
+    const item = el.closest('.TO');
+    if (item) return item;
+  }
+  return null;
 }
 
 /**
@@ -700,12 +764,149 @@ function handleComposeWindow(composeWindow, preDetectedLabels = null) {
                          window.gmailLabelManager?.pendingReplyLabels || 
                          detectOriginalEmailLabels();
     
-    if (labelsToApply && labelsToApply.length > 0) {
+    // 中间步骤：在撰写窗口中显示“检测到的原邮件标签”，用于验证读取是否正确
+    try {
+      if (labelsToApply && labelsToApply.length > 0) {
+        // 优先在发送按钮旁边展示
+        if (!showDetectedLabelsDebugNearSend(labelsToApply, composeWindow)) {
+          // 回退到撰写区域内展示
+          showDetectedLabelsDebug(labelsToApply, composeWindow);
+        }
+      }
+    } catch (e) { console.warn('showDetectedLabelsDebug failed:', e); }
+
+      if (labelsToApply && labelsToApply.length > 0) {
       // 延迟应用标签，等待界面稳定
       setTimeout(() => {
         detectAndApplyLabels(composeWindow, labelsToApply);
       }, 1000);
     }
+  }
+}
+
+/**
+ * 在撰写窗口中显示一个调试条，展示“检测到的原邮件标签”，用于验证读取是否正确
+ */
+function showDetectedLabelsDebug(labels, composeWindow) {
+  try {
+    if (!composeWindow || composeWindow.querySelector('.glm-detected-labels')) return;
+    // 优先放到底部工具条容器，靠近发送区域
+    const footer = composeWindow.querySelector('.gU.Up');
+    const insertionPoint = footer || findLabelInsertionPoint(composeWindow) || composeWindow;
+    const container = document.createElement('div');
+    container.className = 'glm-detected-labels';
+    container.style.cssText = 'padding:8px;margin:6px 0;border:1px dashed #9aa0a6;border-radius:4px;font-size:12px;color:#5f6368;background:#fff;';
+    const title = document.createElement('div');
+    title.textContent = 'Detected original labels:';
+    title.style.cssText = 'font-weight:600;margin-bottom:4px;';
+    container.appendChild(title);
+
+    const list = document.createElement('div');
+    list.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;';
+    (labels || []).forEach(l => {
+      const name = typeof l === 'string' ? l : l.name;
+      const chip = document.createElement('span');
+      chip.textContent = name;
+      chip.style.cssText = 'background:#e8f0fe;color:#1a73e8;padding:2px 8px;border-radius:12px;';
+      list.appendChild(chip);
+    });
+    container.appendChild(list);
+
+    const actions = document.createElement('div');
+    actions.style.cssText = 'margin-top:6px;display:flex;gap:8px;';
+    const applyBtn = document.createElement('button');
+    applyBtn.textContent = 'Apply now';
+    applyBtn.style.cssText = 'padding:4px 10px;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:4px;cursor:pointer;font-size:12px;';
+    applyBtn.addEventListener('click', () => {
+      applyLabelsToReply(labels, composeWindow);
+    });
+    const dismissBtn = document.createElement('button');
+    dismissBtn.textContent = 'Dismiss';
+    dismissBtn.style.cssText = 'padding:4px 10px;border:1px solid #dadce0;color:#5f6368;background:#fff;border-radius:4px;cursor:pointer;font-size:12px;';
+    dismissBtn.addEventListener('click', () => container.remove());
+    actions.appendChild(applyBtn);
+    actions.appendChild(dismissBtn);
+    container.appendChild(actions);
+
+    insertionPoint.appendChild(container);
+  } catch (e) {
+    console.warn('showDetectedLabelsDebug error:', e);
+  }
+}
+
+// 在发送按钮旁边显示调试条
+function showDetectedLabelsDebugNearSend(labels, composeWindow) {
+  try {
+    if (composeWindow.querySelector('.glm-detected-labels-inline')) return true;
+
+    const tryAttach = (attempt) => {
+      // Send 按钮的多语言/多样式选择器（包含匹配）
+      const selectorCandidates = [
+        '[data-tooltip="Send"]',
+        '[data-tooltip*="Send"]',
+        '[aria-label*="Send"]',
+        '[data-tooltip="发送"]',
+        '[data-tooltip*="发送"]',
+        '[aria-label*="发送"]',
+        '.T-I.J-J5-Ji.aoO.v7.T-I-atl.L3'
+      ];
+      let sendButton = null;
+      for (const sel of selectorCandidates) {
+        sendButton = composeWindow.querySelector(sel);
+        if (sendButton) break;
+      }
+      if (!sendButton) {
+        if (attempt < 8) {
+          setTimeout(() => tryAttach(attempt + 1), 200);
+        }
+        return;
+      }
+
+      const container = document.createElement('div');
+      container.className = 'glm-detected-labels-inline';
+      container.style.cssText = 'display:flex;align-items:center;gap:6px;margin-left:8px;';
+
+      const title = document.createElement('span');
+      title.textContent = 'Detected:';
+      title.style.cssText = 'font-size:12px;color:#5f6368;';
+      container.appendChild(title);
+
+      (labels || []).slice(0, 3).forEach(l => {
+        const name = typeof l === 'string' ? l : l.name;
+        const chip = document.createElement('span');
+        chip.textContent = name;
+        chip.style.cssText = 'background:#e8f0fe;color:#1a73e8;padding:2px 6px;border-radius:12px;font-size:12px;';
+        container.appendChild(chip);
+      });
+
+      if (labels.length > 3) {
+        const more = document.createElement('span');
+        more.textContent = `+${labels.length - 3}`;
+        more.style.cssText = 'font-size:12px;color:#5f6368;';
+        container.appendChild(more);
+      }
+
+      const applyBtn = document.createElement('button');
+      applyBtn.textContent = 'Apply';
+      applyBtn.style.cssText = 'padding:2px 8px;border:1px solid #1a73e8;color:#1a73e8;background:#fff;border-radius:4px;cursor:pointer;font-size:12px;';
+      applyBtn.addEventListener('click', () => applyLabelsToReply(labels, composeWindow));
+      container.appendChild(applyBtn);
+
+      // 优先插在发送按钮之后，确保可见
+      try {
+        sendButton.insertAdjacentElement('afterend', container);
+      } catch (_) {
+        const parent = sendButton.parentElement || composeWindow.querySelector('.gU.Up');
+        if (!parent) return;
+        parent.appendChild(container);
+      }
+    };
+
+    tryAttach(0);
+    return true;
+  } catch (e) {
+    console.warn('showDetectedLabelsDebugNearSend error:', e);
+    return false;
   }
 }
 
@@ -748,47 +949,12 @@ function isReplyWindow(composeWindow) {
 /**
  * 检测并应用标签到回复邮件
  */
-function detectAndApplyLabels(composeWindow, providedLabels = null) {
-  console.log('Detecting and applying labels to reply');
-  
-  // 获取要应用的标签
-  const labelsToApply = providedLabels || detectOriginalEmailLabels();
-  
-  if (labelsToApply && labelsToApply.length > 0) {
-    console.log('Found labels to apply:', labelsToApply);
-    
-    // 过滤掉系统标签，只处理用户标签
-    const userLabels = labelsToApply.filter(label => typeof label === 'string' ? !isSystemLabel(label) : !isSystemLabel(label.name));
-    
-    if (userLabels.length > 0) {
-      if (extensionConfig?.userConfig?.requireConfirmation) {
-        showLabelConfirmation(userLabels, composeWindow);
-      } else {
-        // 自动应用标签
-        applyLabelsToReply(userLabels, composeWindow);
-      }
-    }
-  }
-}
+function detectAndApplyLabels() {}
 
 /**
  * 应用标签到回复邮件
  */
-function applyLabelsToReply(labels, composeWindow) {
-  console.log('Applying labels to reply:', labels);
-  
-  // 在撰写窗口中显示标签提示
-  showLabelsInComposeWindow(labels, composeWindow);
-  
-  // 存储标签信息，在发送时应用
-  if (!window.gmailLabelManager) {
-    window.gmailLabelManager = {};
-  }
-  window.gmailLabelManager.labelsToApply = labels;
-  
-  // 监听发送按钮点击
-  setupSendButtonListener(composeWindow);
-}
+function applyLabelsToReply() {}
 
 /**
  * 在撰写窗口中显示标签
@@ -885,22 +1051,104 @@ function setupSendButtonListener(composeWindow) {
 }
 
 /**
- * 处理发送按钮点击
+ * 在发送后将同样的用户标签应用到“已发送”邮件项
+ * 由于无法直接调用 Gmail API，这里采用 DOM 观察 + 操作界面菜单的方式
  */
-function handleSendButtonClick(event) {
-  console.log('Send button clicked, applying labels...');
-  
-  const labelsToApply = window.gmailLabelManager?.labelsToApply;
-  if (labelsToApply && labelsToApply.length > 0) {
-    // 这里可以通过Gmail API或其他方式应用标签
-    // 由于Gmail的限制，我们主要是提供视觉提示
-    console.log('Labels that would be applied:', labelsToApply);
-    
-    // 清理临时数据
-    delete window.gmailLabelManager.labelsToApply;
-    delete window.gmailLabelManager.pendingReplyLabels;
+function scheduleApplyLabelsAfterSend(labels) {
+  try {
+    // 只保留非系统标签的纯字符串名称
+    const userLabelNames = (labels || [])
+      .map(l => (typeof l === 'string' ? l : l.name))
+      .filter(name => name && !isSystemLabel(name));
+    if (userLabelNames.length === 0) return;
+
+    // 观察列表区域，等待“邮件已发送”的线程出现在列表中
+    const listContainerCandidates = [
+      document.querySelector('[role="main"]'),
+      document.querySelector('.nH'),
+      document.body
+    ].filter(Boolean);
+
+    const observer = new MutationObserver((mutations, obs) => {
+      // 查找最新一条“已发送”线程（通常会跳转到 Sent 或者当前列表顶端出现）
+      const thread = findLatestSentThread();
+      if (thread) {
+        obs.disconnect();
+        // 打开“标签”菜单并选择标签
+        tryApplyLabelsViaMenu(thread, userLabelNames);
+      }
+    });
+
+    listContainerCandidates.forEach(c => {
+      try {
+        observer.observe(c, { childList: true, subtree: true });
+      } catch (_) {}
+    });
+
+    // 兜底：3.5 秒后停止观察
+    setTimeout(() => observer.disconnect(), 3500);
+  } catch (e) {
+    console.warn('scheduleApplyLabelsAfterSend failed:', e);
   }
 }
+
+function findLatestSentThread() {
+  // 优先在“已发送”列表中寻找首条
+  const sentCandidates = [
+    '[href*="#sent"]',
+    'a[title*="Sent"]',
+    'a[aria-label*="Sent"]'
+  ];
+  // 如果页面已经在 Sent 视图，则直接取列表第一条
+  const inSent = window.location.hash?.includes('#sent');
+  if (inSent) {
+    const row = document.querySelector('.UI tbody .zA');
+    return row;
+  }
+  // 否则在当前列表区域找最近插入的一条邮件行
+  const rows = document.querySelectorAll('.UI tbody .zA');
+  return rows && rows.length ? rows[0] : null;
+}
+
+function tryApplyLabelsViaMenu(threadRow, userLabelNames) {
+  try {
+    // 打开该行的更多菜单（通常类名 ar9 或包含 data-tooltip="更多"）
+    const moreBtn = threadRow.querySelector('.ar9, [data-tooltip*="More"], [aria-label*="More"]');
+    if (moreBtn) moreBtn.click();
+
+    // 打开“标签”子菜单（可能为移动到、标签、Label）
+    setTimeout(() => {
+      const labelMenuItem = document.querySelector('[divlabel*="Label"], [data-tooltip*="Label"], .SK .J-N');
+      if (labelMenuItem) labelMenuItem.click();
+
+      // 勾选需要的标签
+      setTimeout(() => {
+        userLabelNames.forEach(name => {
+          const item = Array.from(document.querySelectorAll('.J-M.J-M-ayU .J-N'))
+            .find(el => el.textContent?.trim() === name);
+          if (item && !item.getAttribute('aria-checked')) {
+            item.click();
+          }
+        });
+        // 关闭菜单
+        const closeBtn = document.querySelector('.gb_zf, .SK .b7');
+        if (closeBtn) closeBtn.click();
+      }, 400);
+    }, 200);
+  } catch (e) {
+    console.warn('tryApplyLabelsViaMenu failed:', e);
+  }
+}
+
+/**
+ * 处理发送按钮点击
+ */
+function handleSendButtonClick() {}
+
+/**
+ * 在当前会话视图的工具栏中通过“标签”菜单对整个线程应用标签
+ */
+function tryApplyLabelsToCurrentThread() { return false; }
 
 /**
  * 检测原邮件的标签
@@ -1413,22 +1661,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       break;
       
     case 'getLabels':
-      // 获取Gmail标签数据
-      try {
-        const labels = getAllGmailLabels();
-        console.log('Returning Gmail labels to background:', labels);
-        sendResponse({ 
-          success: true, 
-          labels: labels 
-        });
-      } catch (error) {
-        console.error('Error getting Gmail labels:', error);
-        sendResponse({ 
-          success: false, 
-          error: error.message 
-        });
+      // 仅让顶层页面响应，避免多个frame重复返回
+      if (window !== window.top) {
+        sendResponse({ success: false, error: 'Ignored in iframe' });
+        return true;
       }
-      return true; // 保持消息通道开放
+      // 获取标签，若暂时为空则短暂重试
+      (function attempt(count) {
+        try {
+          const labels = getAllGmailLabels();
+          if (labels && labels.length) {
+            console.log('Returning Gmail labels to background:', labels);
+            sendResponse({ success: true, labels });
+          } else if (count < 3) {
+            setTimeout(() => attempt(count + 1), 400);
+          } else {
+            console.log('Returning Gmail labels (empty after retries).');
+            sendResponse({ success: true, labels: [] });
+          }
+        } catch (error) {
+          console.error('Error getting Gmail labels:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+      })(0);
+      return true;
       
     default:
       console.log('Unknown message action:', request.action);

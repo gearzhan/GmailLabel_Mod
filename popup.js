@@ -50,17 +50,7 @@ async function loadConfiguration() {
  */
 function setupEventListeners() {
   // 切换开关事件
-  const autoApplyToggle = document.getElementById('autoApplyToggle');
-  const confirmationToggle = document.getElementById('confirmationToggle');
   const dragDropToggle = document.getElementById('dragDropToggle');
-  
-  autoApplyToggle.addEventListener('click', () => {
-    toggleSetting('autoApplyLabels', autoApplyToggle);
-  });
-  
-  confirmationToggle.addEventListener('click', () => {
-    toggleSetting('showConfirmation', confirmationToggle);
-  });
   
   dragDropToggle.addEventListener('click', () => {
     toggleSetting('enableDragAndDrop', dragDropToggle);
@@ -149,16 +139,6 @@ function updateUI() {
   
   // 更新切换开关状态
   const userConfig = currentConfig.userConfig || {};
-  
-  updateToggleState(
-    document.getElementById('autoApplyToggle'),
-    userConfig.autoApplyLabels
-  );
-  
-  updateToggleState(
-    document.getElementById('confirmationToggle'),
-    userConfig.showConfirmation
-  );
   
   updateToggleState(
     document.getElementById('dragDropToggle'),
