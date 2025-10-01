@@ -44,11 +44,16 @@ async function getLabels() {
 }
 
 // 编码标签为搜索语法
+// Gmail 规则：转小写，空格、斜杠、& 替换为连字符，其他字符保持不变
 function encodeLabel(labelName) {
-  if (/[\s"'\/]/.test(labelName)) {
-    return `label:"${labelName.replace(/"/g, '\\"')}"`;
-  }
-  return `label:${labelName}`;
+  // 1. 转小写
+  // 2. 空格、斜杠、& 替换为连字符
+  // 3. 其他特殊字符（如 [], () 等）保持不变
+  const normalized = labelName
+    .toLowerCase()
+    .replace(/[\s\/&]/g, '-');    // 只替换空格、斜杠和 &
+
+  return `label:${normalized}`;
 }
 
 // 构建搜索查询
