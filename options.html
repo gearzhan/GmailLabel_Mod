@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gmail Multi-Label Picker - 设置</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #f9fafb;
+      padding: 24px;
+      line-height: 1.6;
+      color: #111827;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      padding: 32px;
+    }
+
+    h1 {
+      font-size: 28px;
+      margin-bottom: 8px;
+      color: #111827;
+    }
+
+    .subtitle {
+      color: #6b7280;
+      font-size: 14px;
+      margin-bottom: 32px;
+    }
+
+    .section {
+      margin-bottom: 40px;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #374151;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .section-desc {
+      font-size: 14px;
+      color: #6b7280;
+      margin-bottom: 16px;
+    }
+
+    .auth-status {
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .auth-status.authenticated {
+      background: #d1fae5;
+      border: 1px solid #6ee7b7;
+      color: #065f46;
+    }
+
+    .auth-status.not-authenticated {
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #f9fafb;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: #f3f4f6;
+      border-color: #9ca3af;
+    }
+
+    .btn.primary {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+    }
+
+    .btn.primary:hover {
+      background: #2563eb;
+    }
+
+    .btn.danger {
+      background: #ef4444;
+      color: white;
+      border-color: #ef4444;
+    }
+
+    .btn.danger:hover {
+      background: #dc2626;
+    }
+
+    .label-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 16px;
+      font-size: 14px;
+    }
+
+    .label-table th {
+      text-align: left;
+      padding: 12px;
+      background: #f3f4f6;
+      font-weight: 600;
+      color: #374151;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    .label-table td {
+      padding: 12px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .label-table tr:hover {
+      background: #f9fafb;
+    }
+
+    .label-real {
+      font-family: monospace;
+      color: #6b7280;
+      font-size: 13px;
+    }
+
+    .label-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .label-input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .drag-handle {
+      cursor: grab;
+      color: #9ca3af;
+      padding: 4px;
+    }
+
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+
+    .checkbox {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: #6b7280;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 40px;
+      color: #9ca3af;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .message {
+      padding: 12px 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+
+    .message.success {
+      background: #d1fae5;
+      border: 1px solid #6ee7b7;
+      color: #065f46;
+    }
+
+    .message.error {
+      background: #fee2e2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+    }
+
+    .search-box {
+      margin-bottom: 16px;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 10px 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .stats {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      color: #6b7280;
+    }
+
+    .stat-item strong {
+      color: #3b82f6;
+      font-size: 18px;
+    }
+
+    .group-card {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .group-card input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+
+    .group-card .btn {
+      padding: 8px 16px;
+    }
+
+    .group-card .btn.danger {
+      background: #ef4444;
+      color: white;
+      border-color: #ef4444;
+    }
+
+    .group-card .btn.danger:hover {
+      background: #dc2626;
+    }
+
+    .label-table select {
+      width: 100%;
+      padding: 6px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📧 Gmail Multi-Label Picker</h1>
+    <p class="subtitle">Customize label display, groups, and visibility settings</p>
+
+    <div id="message"></div>
+
+    <!-- OAuth Configuration -->
+    <div class="section">
+      <div class="section-title">⚙️ OAuth Configuration</div>
+      <div class="section-desc">
+        Get your OAuth Client ID from Google Cloud Console and enter it below.
+        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color: #3b82f6;">Go to Google Cloud Console →</a>
+      </div>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <input
+          type="text"
+          id="clientIdInput"
+          class="label-input"
+          placeholder="e.g. 123456789-abcdef.apps.googleusercontent.com"
+          style="flex: 1;"
+        />
+        <button class="btn primary" id="saveClientIdBtn">Save</button>
+      </div>
+      <div style="margin-top: 8px; font-size: 12px; color: #6b7280;">
+        Client ID will be stored locally for OAuth authentication only
+      </div>
+    </div>
+
+    <!-- Authorization Status -->
+    <div class="section">
+      <div class="section-title">🔐 Authorization Status</div>
+      <div id="authStatus" class="auth-status not-authenticated">
+        <span>Checking...</span>
+      </div>
+    </div>
+
+    <!-- Group Management -->
+    <div class="section">
+      <div class="section-title">📁 Group Management</div>
+      <div class="section-desc">
+        Create and manage custom label groups. System labels are automatically placed in the "System" group.
+      </div>
+
+      <div style="margin-bottom: 16px;">
+        <button class="btn primary" id="addGroupBtn">➕ Add New Group</button>
+      </div>
+
+      <div id="groupListContainer">
+        <div class="loading">Loading groups...</div>
+      </div>
+    </div>
+
+    <!-- Label Management -->
+    <div class="section">
+      <div class="section-title">🏷️ Label Management</div>
+      <div class="section-desc">
+        Rename label display names, assign to groups, and hide unwanted labels (doesn't affect real labels in Gmail)
+      </div>
+
+      <div class="stats" id="stats" style="display: none;">
+        <div class="stat-item">
+          Total <strong id="totalLabels">0</strong> labels
+        </div>
+        <div class="stat-item">
+          Renamed <strong id="renamedLabels">0</strong>
+        </div>
+        <div class="stat-item">
+          Hidden <strong id="hiddenLabels">0</strong>
+        </div>
+      </div>
+
+      <div class="search-box">
+        <input type="search" id="searchInput" placeholder="🔍 Filter labels...">
+      </div>
+
+      <div id="labelTableContainer">
+        <div class="loading">Loading labels...</div>
+      </div>
+
+      <div class="actions">
+        <button class="btn primary" id="saveBtn">💾 Save Settings</button>
+        <button class="btn" id="resetBtn">🔄 Reset All</button>
+        <button class="btn" id="refreshBtn">🔃 Refresh Labels</button>
+      </div>
+    </div>
+
+    <!-- Usage Guide -->
+    <div class="section">
+      <div class="section-title">📖 Usage Guide</div>
+      <ul style="list-style: none; padding-left: 0; color: #6b7280; font-size: 14px;">
+        <li style="margin-bottom: 8px;">✓ <strong>Rename:</strong> Enter a new display name (shown in extension only)</li>
+        <li style="margin-bottom: 8px;">✓ <strong>Group:</strong> Assign labels to custom groups for better organization</li>
+        <li style="margin-bottom: 8px;">✓ <strong>Hide:</strong> Check the hide checkbox to hide labels from the panel</li>
+        <li style="margin-bottom: 8px;">✓ <strong>Multi-select Search:</strong> Use the panel in Gmail's bottom-left corner</li>
+        <li style="margin-bottom: 8px;">✓ <strong>OAuth Authorization:</strong> First-time use requires Gmail label read permission</li>
+      </ul>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

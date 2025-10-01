@@ -1,0 +1,23 @@
+# Chrome Extension
+*.pem
+*.crx
+*.zip
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# Temporary
+.tmp/
+temp/
