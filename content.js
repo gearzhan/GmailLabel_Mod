@@ -141,6 +141,13 @@ function renderLabels(container) {
 
     if (visibleLabels.length === 0) continue;
 
+    // 按名称排序
+    visibleLabels.sort((a, b) => {
+      const nameA = getDisplayName(a.name).toLowerCase();
+      const nameB = getDisplayName(b.name).toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+
     // 获取分组名称
     let groupName = 'Ungrouped';
     if (groupId === 'system') {
@@ -164,8 +171,7 @@ function renderLabels(container) {
       const isSelected = STATE.selected.has(label.name);
       html += `
         <div class="label-item ${isSelected ? 'selected' : ''}" data-label="${label.name}">
-          <input type="checkbox" ${isSelected ? 'checked' : ''} />
-          <span>${displayName}</span>
+          ${displayName}
         </div>
       `;
     });
@@ -218,15 +224,10 @@ function renderPanel() {
   if (!shadow) return;
 
   const $labelList = shadow.getElementById('labelList');
-  const $selectedCount = shadow.getElementById('selectedCount');
   const $modeBtn = shadow.getElementById('modeBtn');
 
   if ($labelList) {
     renderLabels($labelList);
-  }
-
-  if ($selectedCount) {
-    $selectedCount.textContent = `${STATE.selected.size} selected`;
   }
 
   if ($modeBtn) {
@@ -247,7 +248,7 @@ function injectPanel() {
     position: fixed;
     bottom: 20px;
     left: 20px;
-    width: 280px;
+    width: 300px;
     z-index: 9999;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   `;
@@ -268,13 +269,6 @@ function injectPanel() {
         font-size: 13px;
         line-height: 1.5;
         position: relative;
-      }
-      .panel-header {
-        font-weight: 600;
-        font-size: 14px;
-        padding: 12px 14px;
-        color: #111827;
-        border-bottom: 1px solid #e5e7eb;
       }
       .panel-content {
         padding: 12px;
@@ -380,50 +374,42 @@ function injectPanel() {
       }
       .group-labels {
         display: flex;
-        flex-direction: column;
-        gap: 4px;
+        flex-wrap: wrap;
+        gap: 3px;
         padding-left: 12px;
       }
       .label-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 10px;
-        border: 1px solid #e5e7eb;
-        border-radius: 6px;
+        padding: 1px 5px;
         cursor: pointer;
         user-select: none;
         transition: all 0.15s;
         font-size: 12px;
-        background: #ffffff;
+        background: #f8fafc;
+        border: 1px solid #bfdbfe;
+        border-radius: 3px;
+        white-space: nowrap;
       }
       .label-item:hover {
-        border-color: #3b82f6;
-        background: #f0f9ff;
+        background: #dbeafe;
+        border-color: #93c5fd;
       }
       .label-item.selected {
-        background: #eff6ff;
+        background: #3b82f6;
+        color: #ffffff;
         border-color: #3b82f6;
-        color: #1e40af;
-        font-weight: 500;
       }
-      .label-item input[type="checkbox"] {
-        margin: 0;
-        cursor: pointer;
+      .label-item.selected:hover {
+        background: #2563eb;
+        border-color: #2563eb;
       }
-      .status-bar {
+      .action-bar {
         margin-top: 10px;
         padding-top: 10px;
         border-top: 1px solid #e5e7eb;
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         align-items: center;
-        font-size: 11px;
-        color: #6b7280;
-      }
-      .selected-count {
-        font-weight: 500;
-        color: #3b82f6;
+        gap: 6px;
       }
       .empty-state {
         text-align: center;
@@ -450,49 +436,39 @@ function injectPanel() {
         position: absolute;
         bottom: 8px;
         left: 8px;
-        width: 28px;
-        height: 28px;
+        width: 24px;
+        height: 24px;
         border-radius: 50%;
         background: #ef4444;
         color: white;
         border: none;
         cursor: pointer;
-        font-size: 16px;
+        font-size: 14px;
         display: flex;
         align-items: center;
         justify-content: center;
         transition: all 0.2s;
-        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+        box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
       }
       .collapse-toggle:hover {
         background: #dc2626;
         transform: scale(1.05);
       }
+      .panel-collapsed {
+        width: 40px;
+        height: 40px;
+      }
       .panel-collapsed .panel-content {
         display: none;
       }
-      .panel-collapsed .panel-header {
-        border-bottom: none;
-      }
-      .settings-link {
-        position: absolute;
-        top: 12px;
-        right: 14px;
-        font-size: 16px;
-        color: #6b7280;
-        text-decoration: none;
-        cursor: pointer;
-        transition: color 0.15s;
-      }
-      .settings-link:hover {
-        color: #3b82f6;
+      .panel-collapsed .collapse-toggle {
+        position: relative;
+        bottom: auto;
+        left: auto;
+        margin: 8px;
       }
     </style>
     <div class="card ${STATE.panelCollapsed ? 'panel-collapsed' : ''}" id="panel">
-      <div class="panel-header">
-        📧 Multi-Label Search
-        <a class="settings-link" id="settingsBtn" title="Settings">⚙️</a>
-      </div>
       <div class="panel-content">
         <div id="errorContainer"></div>
         <div class="controls">
@@ -507,12 +483,9 @@ function injectPanel() {
         <div class="label-list" id="labelList">
           <div class="loading">Loading labels...</div>
         </div>
-        <div class="status-bar">
-          <span id="selectedCount">0 selected</span>
-          <div style="display: flex; gap: 6px;">
-            <button class="btn" id="clearBtn">Clear</button>
-            <button class="btn primary" id="searchBtn">Search</button>
-          </div>
+        <div class="action-bar">
+          <button class="btn" id="clearBtn">Clear</button>
+          <button class="btn primary" id="searchBtn">Search</button>
         </div>
       </div>
       <button class="collapse-toggle" id="collapseBtn" title="Toggle panel">
@@ -530,7 +503,6 @@ function injectPanel() {
   const $clearBtn = shadow.getElementById('clearBtn');
   const $searchBtn = shadow.getElementById('searchBtn');
   const $collapseBtn = shadow.getElementById('collapseBtn');
-  const $settingsBtn = shadow.getElementById('settingsBtn');
 
   $filterInput.addEventListener('input', (e) => {
     STATE.filterText = e.target.value;
@@ -562,10 +534,6 @@ function injectPanel() {
       $panel.classList.remove('panel-collapsed');
       $collapseBtn.textContent = '▼';
     }
-  });
-
-  $settingsBtn.addEventListener('click', () => {
-    chrome.runtime.openOptionsPage();
   });
 
   // 加载数据
