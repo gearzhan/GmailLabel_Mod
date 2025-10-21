@@ -9,7 +9,7 @@ const STATE = {
   groups: {},         // 自定义分组 { groupId: { name, labelIds: [], collapsed: false } }
   labelGroups: {},    // 标签到分组的映射 { labelId: groupId }
   collapsedGroups: new Set(), // 收起的分组 ID
-  panelCollapsed: false // 面板是否收起
+  panelCollapsed: true // 面板是否收起（默认收起）
 };
 
 // 从存储加载配置
@@ -21,7 +21,8 @@ async function loadConfig() {
       'hidden',
       'groups',
       'labelGroups',
-      'collapsedGroups'
+      'collapsedGroups',
+      'panelCollapsed'
     ], (data) => {
       STATE.displayNameMap = data.displayNameMap || {};
       STATE.order = data.order || [];
@@ -29,6 +30,8 @@ async function loadConfig() {
       STATE.groups = data.groups || {};
       STATE.labelGroups = data.labelGroups || {};
       STATE.collapsedGroups = new Set(data.collapsedGroups || []);
+      // 加载面板收起状态，如果未设置则使用默认值（true）
+      STATE.panelCollapsed = data.panelCollapsed !== undefined ? data.panelCollapsed : true;
       resolve();
     });
   });
@@ -251,8 +254,8 @@ function injectPanel() {
   host.id = 'mlp-root';
   host.style.cssText = `
     position: fixed;
-    bottom: 20px;
-    left: 20px;
+    bottom: 16px;
+    left: 12px;
     width: 300px;
     z-index: 9999;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -439,38 +442,59 @@ function injectPanel() {
       }
       .collapse-toggle {
         position: absolute;
-        bottom: 8px;
-        left: 8px;
-        width: 24px;
-        height: 24px;
+        top: -16px;
+        right: 12px;
+        width: 32px;
+        height: 32px;
         border-radius: 50%;
-        background: #ef4444;
+        background: #1a73e8;
         color: white;
         border: none;
         cursor: pointer;
-        font-size: 14px;
+        font-size: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.2s;
-        box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+        transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.1);
+        z-index: 1;
       }
       .collapse-toggle:hover {
-        background: #dc2626;
+        background: #1765cc;
+        transform: scale(1.1);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.25), 0 6px 12px rgba(0,0,0,0.15);
+      }
+      .collapse-toggle:active {
         transform: scale(1.05);
       }
+      .collapse-icon {
+        transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+      }
+      .panel-collapsed .collapse-icon {
+        transform: rotate(180deg);
+      }
       .panel-collapsed {
-        width: 40px;
-        height: 40px;
+        width: 44px;
+        height: 44px;
+        background: transparent;
+        border: none;
+        box-shadow: none;
       }
       .panel-collapsed .panel-content {
         display: none;
       }
       .panel-collapsed .collapse-toggle {
         position: relative;
-        bottom: auto;
-        left: auto;
+        top: auto;
+        right: auto;
         margin: 8px;
+        width: 44px;
+        height: 44px;
+        font-size: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.1);
+      }
+      .card {
+        transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
       }
     </style>
     <div class="card ${STATE.panelCollapsed ? 'panel-collapsed' : ''}" id="panel">
@@ -493,8 +517,8 @@ function injectPanel() {
           <button class="btn primary" id="searchBtn">Search</button>
         </div>
       </div>
-      <button class="collapse-toggle" id="collapseBtn" title="Toggle panel">
-        ${STATE.panelCollapsed ? '▲' : '▼'}
+      <button class="collapse-toggle" id="collapseBtn" title="${STATE.panelCollapsed ? 'Expand panel' : 'Collapse panel'}">
+        <span class="collapse-icon">▼</span>
       </button>
     </div>
   `;
@@ -534,11 +558,13 @@ function injectPanel() {
     const $panel = shadow.getElementById('panel');
     if (STATE.panelCollapsed) {
       $panel.classList.add('panel-collapsed');
-      $collapseBtn.textContent = '▲';
+      $collapseBtn.title = 'Expand panel';
     } else {
       $panel.classList.remove('panel-collapsed');
-      $collapseBtn.textContent = '▼';
+      $collapseBtn.title = 'Collapse panel';
     }
+    // 保存面板收起状态
+    chrome.storage.sync.set({ panelCollapsed: STATE.panelCollapsed });
   });
 
   // 加载数据
