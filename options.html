@@ -240,12 +240,18 @@
       font-size: 18px;
     }
 
+    /* 分组管理区域 - 2列布局 */
+    #groupListContainer {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
     .group-card {
       background: #f9fafb;
       border: 1px solid #e5e7eb;
       border-radius: 8px;
       padding: 12px 16px;
-      margin-bottom: 12px;
       display: flex;
       align-items: center;
       gap: 12px;
@@ -256,11 +262,22 @@
       padding: 8px 12px;
       border: 1px solid #d1d5db;
       border-radius: 6px;
-      font-size: 14px;
+      font-size: 13px;
     }
 
     .group-card .btn {
       padding: 8px 16px;
+      font-size: 13px;
+    }
+
+    .group-card .btn.success {
+      background: #10b981;
+      color: white;
+      border-color: #10b981;
+    }
+
+    .group-card .btn.success:hover {
+      background: #059669;
     }
 
     .group-card .btn.danger {
@@ -273,11 +290,258 @@
       background: #dc2626;
     }
 
+    /* 新建分组表单 */
+    .new-group-form {
+      background: #eff6ff;
+      border: 2px dashed #3b82f6;
+      grid-column: 1 / -1;
+    }
+
+    .new-group-form input {
+      background: white;
+    }
+
     .label-table select {
       width: 100%;
       padding: 6px 10px;
       border: 1px solid #d1d5db;
       border-radius: 6px;
+      font-size: 13px;
+    }
+
+    /* 卡片网格布局样式 */
+    #labelGridContainer {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .group-column {
+      background: #f9fafb;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .group-header {
+      padding: 12px 16px;
+      background: #f3f4f6;
+      border-bottom: 2px solid #e5e7eb;
+      border-radius: 6px 6px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .group-header .label-count {
+      font-size: 13px;
+      font-weight: 500;
+      color: #6b7280;
+      background: white;
+      padding: 2px 8px;
+      border-radius: 12px;
+    }
+
+    .group-header {
+      font-size: 14px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .group-header:hover {
+      background: #e5e7eb;
+    }
+
+    /* 收起/展开按钮 */
+    .group-collapse-toggle {
+      display: inline-block;
+      transition: transform 0.2s;
+      width: 16px;
+      text-align: center;
+    }
+
+    .group-collapsed .group-collapse-toggle {
+      transform: rotate(-90deg);
+    }
+
+    .group-collapsed .group-drop-zone {
+      display: none;
+    }
+
+    .group-drop-zone {
+      padding: 12px;
+      min-height: 150px;
+      flex: 1;
+    }
+
+    .label-card {
+      background: white;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 8px;
+      cursor: move;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .label-card:hover {
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      transform: translateY(-2px);
+      border-color: #3b82f6;
+    }
+
+    .label-card.selected {
+      background: #eff6ff;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    /* 多选复选框 */
+    .card-select-checkbox {
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .card-hidden-section {
+      position: absolute;
+      right: 8px;
+      top: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .card-hidden-toggle {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+    }
+
+    .card-content {
+      margin-left: 24px;
+      margin-right: 60px;
+    }
+
+    .card-real-name {
+      font-family: monospace;
+      color: #6b7280;
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+
+    .card-display-name {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      font-size: 14px;
+      margin-bottom: 6px;
+      background: #fafafa;
+      transition: all 0.2s;
+    }
+
+    .card-display-name:focus {
+      outline: none;
+      border-color: #3b82f6;
+      background: white;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+    }
+
+    .type-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .type-badge.system {
+      background: #dbeafe;
+      color: #1e40af;
+    }
+
+    .type-badge.user {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .group-empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: #9ca3af;
+      font-size: 12px;
+      font-style: italic;
+    }
+
+    /* 统一字体大小 */
+    body {
+      font-size: 14px;
+    }
+
+    .section-desc {
+      font-size: 13px;
+    }
+
+    .message {
+      font-size: 13px;
+    }
+
+    .search-box input {
+      font-size: 14px;
+    }
+
+    .stats {
+      font-size: 13px;
+    }
+
+    .stat-item strong {
+      font-size: 16px;
+    }
+
+    /* 多选工具栏 */
+    .multi-select-toolbar {
+      position: sticky;
+      top: 0;
+      background: #eff6ff;
+      border: 2px solid #3b82f6;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 10;
+      grid-column: 1 / -1;
+    }
+
+    .multi-select-toolbar select {
+      padding: 8px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      min-width: 200px;
+    }
+
+    .multi-select-toolbar .btn {
       font-size: 13px;
     }
   </style>
@@ -289,9 +553,9 @@
 
     <div id="message"></div>
 
-    <!-- OAuth Configuration -->
+    <!-- OAuth Configuration & Authorization -->
     <div class="section">
-      <div class="section-title">⚙️ OAuth Configuration</div>
+      <div class="section-title">⚙️ OAuth Configuration & Authorization</div>
       <div class="section-desc">
         Get your OAuth Client ID from Google Cloud Console and enter it below.
         <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color: #3b82f6;">Go to Google Cloud Console →</a>
@@ -309,12 +573,8 @@
       <div style="margin-top: 8px; font-size: 12px; color: #6b7280;">
         Client ID will be stored locally for OAuth authentication only
       </div>
-    </div>
 
-    <!-- Authorization Status -->
-    <div class="section">
-      <div class="section-title">🔐 Authorization Status</div>
-      <div id="authStatus" class="auth-status not-authenticated">
+      <div id="authStatus" class="auth-status not-authenticated" style="margin-top: 16px;">
         <span>Checking...</span>
       </div>
     </div>
@@ -324,10 +584,6 @@
       <div class="section-title">📁 Group Management</div>
       <div class="section-desc">
         Create and manage custom label groups. System labels are automatically placed in the "System" group.
-      </div>
-
-      <div style="margin-bottom: 16px;">
-        <button class="btn primary" id="addGroupBtn">➕ Add New Group</button>
       </div>
 
       <div id="groupListContainer">
@@ -373,11 +629,12 @@
     <div class="section">
       <div class="section-title">📖 Usage Guide</div>
       <ul style="list-style: none; padding-left: 0; color: #6b7280; font-size: 14px;">
-        <li style="margin-bottom: 8px;">✓ <strong>Rename:</strong> Enter a new display name (shown in extension only)</li>
-        <li style="margin-bottom: 8px;">✓ <strong>Group:</strong> Assign labels to custom groups for better organization</li>
-        <li style="margin-bottom: 8px;">✓ <strong>Hide:</strong> Check the hide checkbox to hide labels from the panel</li>
-        <li style="margin-bottom: 8px;">✓ <strong>Multi-select Search:</strong> Use the panel in Gmail's bottom-left corner</li>
-        <li style="margin-bottom: 8px;">✓ <strong>OAuth Authorization:</strong> First-time use requires Gmail label read permission</li>
+        <li style="margin-bottom: 8px;">✓ <strong>Multi-Select & Send:</strong> Check labels and use toolbar to send them to a group</li>
+        <li style="margin-bottom: 8px;">✓ <strong>Collapse Groups:</strong> Click group headers to collapse/expand label lists</li>
+        <li style="margin-bottom: 8px;">✓ <strong>Rename:</strong> Edit the display name in each card (shown in extension only)</li>
+        <li style="margin-bottom: 8px;">✓ <strong>Create Groups:</strong> Use the form at top of Group Management section</li>
+        <li style="margin-bottom: 8px;">✓ <strong>Hide Labels:</strong> Check "Hidden" checkbox in top-right of each card</li>
+        <li style="margin-bottom: 8px;">✓ <strong>Save Changes:</strong> Click "Save Settings" button to persist your changes</li>
       </ul>
     </div>
   </div>

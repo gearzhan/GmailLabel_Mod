@@ -7,6 +7,8 @@ let hidden = new Set();
 let searchText = '';
 let groups = {}; // { groupId: { name: string } }
 let labelGroups = {}; // { labelId: groupId }
+let selectedLabels = new Set(); // 多选标签的ID集合
+let collapsedGroups = new Set(); // 收起的分组ID集合
 
 // 加载 Client ID
 async function loadClientId() {
@@ -56,13 +58,15 @@ async function loadConfig() {
       'order',
       'hidden',
       'groups',
-      'labelGroups'
+      'labelGroups',
+      'collapsedGroups'
     ], (data) => {
       displayNameMap = data.displayNameMap || {};
       order = data.order || [];
       hidden = new Set(data.hidden || []);
       groups = data.groups || {};
       labelGroups = data.labelGroups || {};
+      collapsedGroups = new Set(data.collapsedGroups || []);
       resolve();
     });
   });
@@ -77,7 +81,8 @@ async function saveConfig() {
         order,
         hidden: Array.from(hidden),
         groups,
-        labelGroups
+        labelGroups,
+        collapsedGroups: Array.from(collapsedGroups)
       },
       resolve
     );
@@ -145,10 +150,24 @@ function renderGroups() {
 
   let html = '';
 
+  // 新建分组表单
+  html += `
+    <div class="group-card new-group-form">
+      <span style="font-weight: 500;">➕</span>
+      <input
+        type="text"
+        id="newGroupInput"
+        placeholder="Enter new group name..."
+        style="flex: 1;"
+      />
+      <button class="btn primary" id="createGroupBtn">Create</button>
+    </div>
+  `;
+
   // 显示 System 组（不可删除）
   html += `
     <div class="group-card">
-      <span style="color: #6b7280; font-weight: 500;">📁 System (built-in)</span>
+      <span style="color: #6b7280; font-weight: 500; font-size: 13px;">📁 System (built-in)</span>
     </div>
   `;
 
@@ -158,6 +177,7 @@ function renderGroups() {
 
     html += `
       <div class="group-card" data-group-id="${groupId}">
+        <span style="font-size: 13px;">📁</span>
         <input
           type="text"
           value="${group.name}"
@@ -165,7 +185,8 @@ function renderGroups() {
           data-group-id="${groupId}"
           class="group-name-input"
         />
-        <button class="btn danger delete-group-btn" data-group-id="${groupId}">🗑 Delete</button>
+        <button class="btn success save-group-btn" data-group-id="${groupId}">💾 Save</button>
+        <button class="btn danger delete-group-btn" data-group-id="${groupId}">🗑</button>
       </div>
     `;
   }
@@ -173,20 +194,53 @@ function renderGroups() {
   // Ungrouped (不可删除)
   html += `
     <div class="group-card">
-      <span style="color: #6b7280; font-weight: 500;">📁 Ungrouped (default)</span>
+      <span style="color: #6b7280; font-weight: 500; font-size: 13px;">📁 Ungrouped (default)</span>
     </div>
   `;
 
   $container.innerHTML = html;
 
-  // 绑定分组名称修改事件
-  $container.querySelectorAll('.group-name-input').forEach(input => {
-    input.addEventListener('input', (e) => {
-      const groupId = e.target.dataset.groupId;
-      const newName = e.target.value.trim();
-      if (newName && groups[groupId]) {
-        groups[groupId].name = newName;
+  // 新建分组按钮事件
+  const createBtn = document.getElementById('createGroupBtn');
+  const newGroupInput = document.getElementById('newGroupInput');
+
+  createBtn.addEventListener('click', () => {
+    const groupName = newGroupInput.value.trim();
+    if (!groupName) {
+      showMessage('Please enter a group name', 'error');
+      return;
+    }
+
+    const groupId = `group_${Date.now()}`;
+    groups[groupId] = { name: groupName };
+
+    showMessage(`Group "${groupName}" created successfully!`, 'success');
+    renderGroups();
+    renderCardGrid();
+  });
+
+  // 回车键创建分组
+  newGroupInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      createBtn.click();
+    }
+  });
+
+  // 绑定保存按钮
+  $container.querySelectorAll('.save-group-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const groupId = btn.dataset.groupId;
+      const input = $container.querySelector(`.group-name-input[data-group-id="${groupId}"]`);
+      const newName = input.value.trim();
+
+      if (!newName) {
+        showMessage('Group name cannot be empty', 'error');
+        return;
       }
+
+      groups[groupId].name = newName;
+      showMessage(`Group renamed to "${newName}"`, 'success');
+      renderCardGrid();
     });
   });
 
@@ -195,6 +249,7 @@ function renderGroups() {
     btn.addEventListener('click', () => {
       const groupId = btn.dataset.groupId;
       if (confirm(`Delete group "${groups[groupId].name}"? Labels will move to Ungrouped.`)) {
+        const groupName = groups[groupId].name;
         // 删除分组，移除标签关联
         delete groups[groupId];
         for (const [labelId, gid] of Object.entries(labelGroups)) {
@@ -202,159 +257,264 @@ function renderGroups() {
             delete labelGroups[labelId];
           }
         }
+        showMessage(`Group "${groupName}" deleted`, 'success');
         renderGroups();
-        renderTable();
+        renderCardGrid();
       }
     });
   });
 }
 
-// 添加新分组
-function addNewGroup() {
-  const groupName = prompt('Enter new group name:');
-  if (!groupName || !groupName.trim()) return;
+// 创建标签卡片
+function createLabelCard(label) {
+  const card = document.createElement('div');
+  card.className = 'label-card';
+  card.dataset.labelId = label.id;
+  card.dataset.realName = label.name;
 
-  const groupId = `group_${Date.now()}`;
-  groups[groupId] = { name: groupName.trim() };
+  const displayName = displayNameMap[label.name] || label.name;
+  const isHidden = hidden.has(label.name);
+  const isSelected = selectedLabels.has(label.id);
 
-  renderGroups();
-  renderTable();
+  if (isSelected) {
+    card.classList.add('selected');
+  }
+
+  card.innerHTML = `
+    <input type="checkbox" class="card-select-checkbox" ${isSelected ? 'checked' : ''} title="Select this label">
+    <div class="card-hidden-section">
+      <input type="checkbox" class="card-hidden-toggle checkbox" ${isHidden ? 'checked' : ''} title="Hide this label from the panel" id="hidden-${label.id}">
+      <label for="hidden-${label.id}" style="font-size: 11px; color: #6b7280; cursor: pointer; user-select: none;">Hidden</label>
+    </div>
+    <div class="card-content">
+      <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+        <span class="type-badge ${label.type}">${label.type === 'user' ? 'USER' : 'SYSTEM'}</span>
+        <div class="card-real-name" title="${label.name}">${label.name}</div>
+      </div>
+      <input
+        type="text"
+        class="card-display-name"
+        value="${displayName}"
+        placeholder="Display name"
+      />
+    </div>
+  `;
+
+  // 多选复选框事件
+  const selectCheckbox = card.querySelector('.card-select-checkbox');
+  selectCheckbox.addEventListener('change', (e) => {
+    if (e.target.checked) {
+      selectedLabels.add(label.id);
+      card.classList.add('selected');
+    } else {
+      selectedLabels.delete(label.id);
+      card.classList.remove('selected');
+    }
+    renderCardGrid(); // 重新渲染以显示/隐藏工具栏
+  });
+
+  // 显示名称输入事件
+  const displayNameInput = card.querySelector('.card-display-name');
+  displayNameInput.addEventListener('input', (e) => {
+    const newValue = e.target.value.trim();
+    if (newValue && newValue !== label.name) {
+      displayNameMap[label.name] = newValue;
+    } else {
+      delete displayNameMap[label.name];
+    }
+    updateStats();
+  });
+
+  // 隐藏复选框事件
+  const hiddenCheckbox = card.querySelector('.card-hidden-toggle');
+  hiddenCheckbox.addEventListener('change', (e) => {
+    if (e.target.checked) {
+      hidden.add(label.name);
+    } else {
+      hidden.delete(label.name);
+    }
+    updateStats();
+  });
+
+  return card;
 }
 
-// 渲染标签表格
-function renderTable() {
+// 创建分组列
+function createGroupColumn(groupId, groupName, labels) {
+  const column = document.createElement('div');
+  column.className = 'group-column';
+
+  const isCollapsed = collapsedGroups.has(groupId);
+  if (isCollapsed) {
+    column.classList.add('group-collapsed');
+  }
+
+  const header = document.createElement('div');
+  header.className = 'group-header';
+  header.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span class="group-collapse-toggle">${isCollapsed ? '▶' : '▼'}</span>
+      <span>${groupName}</span>
+    </div>
+    <span class="label-count">${labels.length}</span>
+  `;
+
+  // 点击header切换收起/展开
+  header.addEventListener('click', () => {
+    if (collapsedGroups.has(groupId)) {
+      collapsedGroups.delete(groupId);
+    } else {
+      collapsedGroups.add(groupId);
+    }
+    saveConfig();
+    renderCardGrid();
+  });
+
+  const dropZone = document.createElement('div');
+  dropZone.className = 'group-drop-zone';
+  dropZone.dataset.groupId = groupId;
+
+  if (labels.length === 0) {
+    dropZone.innerHTML = '<div class="group-empty">No labels in this group</div>';
+  } else {
+    labels.forEach(label => {
+      const card = createLabelCard(label);
+      dropZone.appendChild(card);
+    });
+  }
+
+  column.appendChild(header);
+  column.appendChild(dropZone);
+  return column;
+}
+
+// 渲染多选工具栏
+function renderMultiSelectToolbar() {
+  if (selectedLabels.size === 0) return null;
+
+  // 获取所有分组选项
+  const groupOptions = [
+    ...Object.entries(groups).map(([id, g]) => ({ id, name: g.name })),
+    { id: 'system', name: 'System' },
+    { id: 'ungrouped', name: 'Ungrouped' }
+  ];
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'multi-select-toolbar';
+  toolbar.innerHTML = `
+    <span><strong>${selectedLabels.size}</strong> items selected</span>
+    <select id="targetGroupSelect">
+      <option value="">Select group...</option>
+      ${groupOptions.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
+    </select>
+    <button class="btn primary" id="sendToGroupBtn">Send to Group</button>
+    <button class="btn" id="cancelSelectionBtn">Cancel</button>
+  `;
+
+  // 绑定事件
+  setTimeout(() => {
+    const sendBtn = document.getElementById('sendToGroupBtn');
+    const cancelBtn = document.getElementById('cancelSelectionBtn');
+    const selectEl = document.getElementById('targetGroupSelect');
+
+    if (sendBtn) {
+      sendBtn.addEventListener('click', () => {
+        const targetGroupId = selectEl.value;
+        if (!targetGroupId) {
+          showMessage('Please select a target group', 'error');
+          return;
+        }
+
+        // 移动所有选中的标签到目标分组
+        let movedCount = 0;
+        selectedLabels.forEach(labelId => {
+          if (targetGroupId === 'ungrouped') {
+            delete labelGroups[labelId];
+          } else {
+            labelGroups[labelId] = targetGroupId;
+          }
+          movedCount++;
+        });
+
+        selectedLabels.clear();
+        showMessage(`Moved ${movedCount} label(s) to group`, 'success');
+        renderCardGrid();
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', () => {
+        selectedLabels.clear();
+        renderCardGrid();
+      });
+    }
+  }, 0);
+
+  return toolbar;
+}
+
+// 渲染卡片网格
+function renderCardGrid() {
   const $container = document.getElementById('labelTableContainer');
 
   // 过滤标签
-  let items = allLabels
-    .filter(label => {
-      if (!searchText) return true;
-      const query = searchText.toLowerCase();
-      const displayName = (displayNameMap[label.name] || label.name).toLowerCase();
-      const realName = label.name.toLowerCase();
-      return displayName.includes(query) || realName.includes(query);
-    })
-    .map((label, index) => ({
-      real: label.name,
-      show: displayNameMap[label.name] || label.name,
-      type: label.type,
-      id: label.id,
-      index
-    }));
+  const filteredLabels = allLabels.filter(label => {
+    if (!searchText) return true;
+    const query = searchText.toLowerCase();
+    const displayName = (displayNameMap[label.name] || label.name).toLowerCase();
+    const realName = label.name.toLowerCase();
+    return displayName.includes(query) || realName.includes(query);
+  });
 
-  if (items.length === 0) {
+  if (filteredLabels.length === 0) {
     $container.innerHTML = '<div class="empty">No matching labels</div>';
     return;
   }
 
-  // 获取所有分组选项
-  const groupOptions = [
-    { id: 'system', name: 'System' },
-    ...Object.entries(groups).map(([id, g]) => ({ id, name: g.name })),
-    { id: 'ungrouped', name: 'Ungrouped' }
-  ];
+  // 按分组组织标签
+  const groupedLabels = {
+    system: [],
+    ungrouped: [],
+    ...Object.keys(groups).reduce((acc, gid) => ({ ...acc, [gid]: [] }), {})
+  };
 
-  // 构建表格
-  const table = document.createElement('table');
-  table.className = 'label-table';
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th style="width: 25%;">Real Name</th>
-        <th style="width: 25%;">Display Name</th>
-        <th style="width: 15%;">Type</th>
-        <th style="width: 20%;">Group</th>
-        <th style="width: 80px;">Hide</th>
-      </tr>
-    </thead>
-    <tbody id="labelTableBody"></tbody>
-  `;
+  filteredLabels.forEach(label => {
+    const groupId = labelGroups[label.id] ||
+                   (label.type === 'system' ? 'system' : 'ungrouped');
+    if (groupedLabels[groupId]) {
+      groupedLabels[groupId].push(label);
+    } else {
+      // 如果分组不存在，放入未分组
+      groupedLabels.ungrouped.push(label);
+    }
+  });
 
-  const tbody = table.querySelector('tbody');
+  // 创建网格容器
+  const grid = document.createElement('div');
+  grid.id = 'labelGridContainer';
 
-  items.forEach((item) => {
-    const row = document.createElement('tr');
-    row.dataset.realName = item.real;
-    row.dataset.labelId = item.id;
+  // 渲染多选工具栏（如果有选中项）
+  const toolbar = renderMultiSelectToolbar();
+  if (toolbar) {
+    grid.appendChild(toolbar);
+  }
 
-    // 获取当前标签的分组
-    const currentGroup = labelGroups[item.id] ||
-                        (item.type === 'system' ? 'system' : 'ungrouped');
+  // 按顺序渲染分组列：自定义分组 -> System -> Ungrouped
+  const groupOrder = [...Object.keys(groups), 'system', 'ungrouped'];
 
-    // 构建分组下拉选项
-    let groupOptionsHTML = '';
-    groupOptions.forEach(opt => {
-      const selected = opt.id === currentGroup ? 'selected' : '';
-      groupOptionsHTML += `<option value="${opt.id}" ${selected}>${opt.name}</option>`;
-    });
+  groupOrder.forEach(groupId => {
+    const labels = groupedLabels[groupId] || [];
 
-    row.innerHTML = `
-      <td>
-        <div class="label-real" title="${item.real}">${item.real}</div>
-      </td>
-      <td>
-        <input
-          type="text"
-          class="label-input display-name-input"
-          value="${item.show}"
-          placeholder="Use real name"
-        />
-      </td>
-      <td>
-        <span style="font-size: 12px; color: #9ca3af;">
-          ${item.type === 'user' ? 'User' : 'System'}
-        </span>
-      </td>
-      <td>
-        <select class="group-select">
-          ${groupOptionsHTML}
-        </select>
-      </td>
-      <td style="text-align: center;">
-        <input
-          type="checkbox"
-          class="checkbox hidden-checkbox"
-          ${hidden.has(item.real) ? 'checked' : ''}
-        />
-      </td>
-    `;
+    const groupName = groupId === 'system' ? 'System' :
+                     groupId === 'ungrouped' ? 'Ungrouped' :
+                     groups[groupId].name;
 
-    // 显示名称变化
-    row.querySelector('.display-name-input').addEventListener('input', (e) => {
-      const newValue = e.target.value.trim();
-      if (newValue && newValue !== item.real) {
-        displayNameMap[item.real] = newValue;
-      } else {
-        delete displayNameMap[item.real];
-      }
-      updateStats();
-    });
-
-    // 分组选择变化
-    row.querySelector('.group-select').addEventListener('change', (e) => {
-      const newGroupId = e.target.value;
-      if (newGroupId === 'ungrouped') {
-        delete labelGroups[item.id];
-      } else {
-        labelGroups[item.id] = newGroupId;
-      }
-    });
-
-    // 隐藏状态变化
-    row.querySelector('.hidden-checkbox').addEventListener('change', (e) => {
-      if (e.target.checked) {
-        hidden.add(item.real);
-      } else {
-        hidden.delete(item.real);
-      }
-      updateStats();
-    });
-
-    tbody.appendChild(row);
+    const column = createGroupColumn(groupId, groupName, labels);
+    grid.appendChild(column);
   });
 
   $container.innerHTML = '';
-  $container.appendChild(table);
+  $container.appendChild(grid);
 
   updateStats();
 }
@@ -375,7 +535,7 @@ async function loadLabels() {
   allLabels = response.labels || [];
   await loadConfig();
   renderGroups();
-  renderTable();
+  renderCardGrid();
   updateAuthStatus();
 }
 
@@ -400,7 +560,7 @@ function reset() {
   saveConfig().then(() => {
     showMessage('Settings reset', 'success');
     renderGroups();
-    renderTable();
+    renderCardGrid();
   });
 }
 
@@ -415,13 +575,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Client ID 保存按钮
   document.getElementById('saveClientIdBtn').addEventListener('click', saveClientId);
 
-  // 添加分组按钮
-  document.getElementById('addGroupBtn').addEventListener('click', addNewGroup);
-
   // 搜索
   document.getElementById('searchInput').addEventListener('input', (e) => {
     searchText = e.target.value.trim();
-    renderTable();
+    renderCardGrid();
   });
 
   // 按钮事件
