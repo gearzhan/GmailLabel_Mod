@@ -17,3 +17,7 @@ Match the repo history pattern of `<type>: <summary>` (`docs:`, `UI优化:`, `�
 
 ## Security & Configuration Tips
 Do not hardcode OAuth credentials; keep the client ID configurable via the options page and document any required scopes. When sharing debugging artifacts, redact tokens and Gmail account identifiers, and remind testers to revoke access from the settings panel after experiments.
+
+## More information
+For more information refer to CLAUDE.md
+

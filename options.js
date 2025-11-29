@@ -2,7 +2,7 @@
 
 let allLabels = [];
 let displayNameMap = {};
-let order = [];
+let order = {};  // 修改：从数组改为对象 { groupId: [labelId1, labelId2, ...] }
 let hidden = new Set();
 let searchText = '';
 let groups = {}; // { groupId: { name: string } }
@@ -62,7 +62,7 @@ async function loadConfig() {
       'collapsedGroups'
     ], (data) => {
       displayNameMap = data.displayNameMap || {};
-      order = data.order || [];
+      order = data.order || {};  // 加载为对象
       hidden = new Set(data.hidden || []);
       groups = data.groups || {};
       labelGroups = data.labelGroups || {};
@@ -110,7 +110,8 @@ async function exportConfiguration() {
       groups,
       labelGroups,
       hidden: Array.from(hidden),
-      collapsedGroups: Array.from(collapsedGroups)
+      collapsedGroups: Array.from(collapsedGroups),
+      order  // 新增：导出排序数据
     }
   };
 
@@ -162,6 +163,7 @@ async function importConfiguration(file) {
     labelGroups = data.labelGroups || {};
     hidden = new Set(data.hidden || []);
     collapsedGroups = new Set(data.collapsedGroups || []);
+    order = data.order || {};  // 新增：导入排序数据
 
     // 保存到storage
     await saveConfig();
@@ -351,6 +353,7 @@ function createLabelCard(label) {
   card.className = 'label-card';
   card.dataset.labelId = label.id;
   card.dataset.realName = label.name;
+  card.draggable = true;  // 启用拖拽
 
   const displayName = displayNameMap[label.name] || label.name;
   const isHidden = hidden.has(label.name);
@@ -416,6 +419,17 @@ function createLabelCard(label) {
     updateStats();
   });
 
+  // 拖拽事件
+  card.addEventListener('dragstart', (e) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', label.id);
+    card.classList.add('dragging');
+  });
+
+  card.addEventListener('dragend', (e) => {
+    card.classList.remove('dragging');
+  });
+
   return card;
 }
 
@@ -454,10 +468,40 @@ function createGroupColumn(groupId, groupName, labels) {
   dropZone.className = 'group-drop-zone';
   dropZone.dataset.groupId = groupId;
 
-  if (labels.length === 0) {
+  // 拖拽进入事件
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+
+    const dragging = document.querySelector('.dragging');
+    if (!dragging) return;
+
+    const afterElement = getDragAfterElement(dropZone, e.clientY);
+    if (afterElement == null) {
+      dropZone.appendChild(dragging);
+    } else {
+      dropZone.insertBefore(dragging, afterElement);
+    }
+  });
+
+  // 放置事件
+  dropZone.addEventListener('drop', async (e) => {  // 添加async
+    e.preventDefault();
+    const labelId = e.dataTransfer.getData('text/plain');
+
+    // 更新排序
+    updateLabelOrder(groupId, dropZone);
+    await saveConfig();  // 添加await，等待保存完成
+    showMessage('Label order updated', 'success');
+  });
+
+  // 按排序渲染labels（如果有排序数据）
+  const sortedLabels = getSortedLabels(labels, groupId);
+
+  if (sortedLabels.length === 0) {
     dropZone.innerHTML = '<div class="group-empty">No labels in this group</div>';
   } else {
-    labels.forEach(label => {
+    sortedLabels.forEach(label => {
       const card = createLabelCard(label);
       dropZone.appendChild(card);
     });
@@ -466,6 +510,49 @@ function createGroupColumn(groupId, groupName, labels) {
   column.appendChild(header);
   column.appendChild(dropZone);
   return column;
+}
+
+// 辅助函数 - 获取鼠标下方的元素
+function getDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.label-card:not(.dragging)')];
+
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+
+    if (offset < 0 && offset > closest.offset) {
+      return { offset: offset, element: child };
+    } else {
+      return closest;
+    }
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+// 辅助函数 - 根据排序获取标签
+function getSortedLabels(labels, groupId) {
+  if (!order[groupId] || order[groupId].length === 0) {
+    // 无排序数据，按字母顺序
+    return labels.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  const orderMap = {};
+  order[groupId].forEach((labelId, index) => {
+    orderMap[labelId] = index;
+  });
+
+  return labels.sort((a, b) => {
+    const orderA = orderMap[a.id] !== undefined ? orderMap[a.id] : 999999;
+    const orderB = orderMap[b.id] !== undefined ? orderMap[b.id] : 999999;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.name.localeCompare(b.name);  // 相同顺序时按名称排序
+  });
+}
+
+// 辅助函数 - 更新标签排序
+function updateLabelOrder(groupId, dropZone) {
+  const cards = dropZone.querySelectorAll('.label-card');
+  const newOrder = Array.from(cards).map(card => card.dataset.labelId);
+  order[groupId] = newOrder;
 }
 
 // 渲染多选工具栏
@@ -632,7 +719,7 @@ function reset() {
   }
 
   displayNameMap = {};
-  order = [];
+  order = {};  // 修改：从[]改为{}，保持对象类型一致
   hidden = new Set();
   groups = {};
   labelGroups = {};

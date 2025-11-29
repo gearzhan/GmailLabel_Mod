@@ -10,7 +10,8 @@ const STATE = {
   labelGroups: {},    // 标签到分组的映射 { labelId: groupId }
   collapsedGroups: new Set(), // 收起的分组 ID
   panelCollapsed: true, // 面板是否收起（默认收起）
-  panelPosition: { x: 12, y: 16 }  // 面板位置（左边距、底边距）
+  panelPosition: { x: 12, y: 16 },  // 面板位置（左边距、底边距）
+  labelColorMap: {}   // 标签颜色映射 { labelId: { backgroundColor, textColor } }
 };
 
 // 从存储加载配置
@@ -24,10 +25,11 @@ async function loadConfig() {
       'labelGroups',
       'collapsedGroups',
       'panelCollapsed',
-      'panelPosition'
+      'panelPosition',
+      'labelColorMap'
     ], (data) => {
       STATE.displayNameMap = data.displayNameMap || {};
-      STATE.order = data.order || [];
+      STATE.order = data.order || {};  // 加载为对象
       STATE.hidden = new Set(data.hidden || []);
       STATE.groups = data.groups || {};
       STATE.labelGroups = data.labelGroups || {};
@@ -36,6 +38,8 @@ async function loadConfig() {
       STATE.panelCollapsed = data.panelCollapsed !== undefined ? data.panelCollapsed : true;
       // 加载面板位置，如果未设置则使用默认值（左下角）
       STATE.panelPosition = data.panelPosition || { x: 12, y: 16 };
+      // 加载标签颜色映射
+      STATE.labelColorMap = data.labelColorMap || {};
       resolve();
     });
   });
@@ -122,6 +126,50 @@ function shouldShowGroup(groupId) {
   return visibleLabels.length > 0;
 }
 
+// 获取标签颜色样式
+function getLabelColor(labelId) {
+  const colors = STATE.labelColorMap[labelId];
+  if (colors && colors.backgroundColor) {
+    return {
+      backgroundColor: colors.backgroundColor,
+      textColor: colors.textColor || '#ffffff'
+    };
+  }
+
+  // 默认灰色方案
+  return {
+    backgroundColor: '#9ca3af',
+    textColor: '#ffffff'
+  };
+}
+
+// 辅助函数 - 根据排序获取标签
+function getSortedLabelsForGroup(labels, groupId) {
+  if (!STATE.order || !STATE.order[groupId] || STATE.order[groupId].length === 0) {
+    // 无排序数据，按字母顺序
+    return labels.sort((a, b) => {
+      const nameA = getDisplayName(a.name).toLowerCase();
+      const nameB = getDisplayName(b.name).toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }
+
+  const orderMap = {};
+  STATE.order[groupId].forEach((labelId, index) => {
+    orderMap[labelId] = index;
+  });
+
+  return labels.sort((a, b) => {
+    const orderA = orderMap[a.id] !== undefined ? orderMap[a.id] : 999999;
+    const orderB = orderMap[b.id] !== undefined ? orderMap[b.id] : 999999;
+    if (orderA !== orderB) return orderA - orderB;
+
+    const nameA = getDisplayName(a.name).toLowerCase();
+    const nameB = getDisplayName(b.name).toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
+}
+
 // 渲染标签列表
 function renderLabels(container) {
   const filterText = STATE.filterText.toLowerCase();
@@ -153,12 +201,8 @@ function renderLabels(container) {
 
     if (visibleLabels.length === 0) continue;
 
-    // 按名称排序
-    visibleLabels.sort((a, b) => {
-      const nameA = getDisplayName(a.name).toLowerCase();
-      const nameB = getDisplayName(b.name).toLowerCase();
-      return nameA.localeCompare(nameB);
-    });
+    // 应用排序（如果有排序数据）
+    const sortedLabels = getSortedLabelsForGroup(visibleLabels, groupId);
 
     // 获取分组名称
     let groupName = 'Ungrouped';
@@ -173,16 +217,24 @@ function renderLabels(container) {
         <div class="group-header" data-group-id="${groupId}">
           <span class="group-toggle">${isCollapsed ? '▶' : '▼'}</span>
           <span class="group-name">${groupName}</span>
-          <span class="group-count">(${visibleLabels.length})</span>
+          <span class="group-count">(${sortedLabels.length})</span>
         </div>
         <div class="group-labels" style="${isCollapsed ? 'display: none;' : ''}">
     `;
 
-    visibleLabels.forEach(label => {
+    sortedLabels.forEach(label => {
       const displayName = getDisplayName(label.name);
       const isSelected = STATE.selected.has(label.name);
+      const colors = getLabelColor(label.id);
+
+      const style = isSelected
+        ? `background: ${colors.backgroundColor}; color: ${colors.textColor}; border-color: ${colors.backgroundColor};`
+        : `background: ${colors.backgroundColor}33; color: #374151; border: 1px solid ${colors.backgroundColor}66;`;
+
       html += `
-        <div class="label-item ${isSelected ? 'selected' : ''}" data-label="${label.name}">
+        <div class="label-item ${isSelected ? 'selected' : ''}"
+             data-label="${label.name}"
+             style="${style}">
           ${displayName}
         </div>
       `;
@@ -256,12 +308,12 @@ function injectPanel() {
   // 创建容器
   const host = document.createElement('div');
   host.id = 'mlp-root';
-  // 使用STATE中保存的位置
+  // 使用STATE中保存的位置，宽度根据收起状态动态设置
   host.style.cssText = `
     position: fixed;
     bottom: ${STATE.panelPosition.y}px;
     left: ${STATE.panelPosition.x}px;
-    width: 300px;
+    width: ${STATE.panelCollapsed ? '60px' : '300px'};
     z-index: 9999;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   `;
@@ -397,23 +449,14 @@ function injectPanel() {
         user-select: none;
         transition: all 0.15s;
         font-size: 12px;
-        background: #f8fafc;
-        border: 1px solid #bfdbfe;
         border-radius: 3px;
         white-space: nowrap;
       }
       .label-item:hover {
-        background: #dbeafe;
-        border-color: #93c5fd;
-      }
-      .label-item.selected {
-        background: #3b82f6;
-        color: #ffffff;
-        border-color: #3b82f6;
+        filter: brightness(0.95);
       }
       .label-item.selected:hover {
-        background: #2563eb;
-        border-color: #2563eb;
+        filter: brightness(0.9);
       }
       .action-bar {
         margin-top: 10px;
@@ -447,22 +490,22 @@ function injectPanel() {
       }
       .collapse-toggle {
         position: absolute;
-        top: -16px;
-        right: 12px;
-        width: 32px;
-        height: 32px;
+        top: 8px;
+        right: 8px;
+        width: 44px;
+        height: 44px;
         border-radius: 50%;
         background: #1a73e8;
         color: white;
         border: none;
         cursor: pointer;
-        font-size: 16px;
+        font-size: 20px;
         display: flex;
         align-items: center;
         justify-content: center;
         transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
         box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.1);
-        z-index: 1;
+        z-index: 10;
       }
       .collapse-toggle:hover {
         background: #1765cc;
@@ -473,10 +516,11 @@ function injectPanel() {
         transform: scale(1.05);
       }
       .collapse-icon {
+        transform: scale(1.45);
         transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
       }
       .panel-collapsed .collapse-icon {
-        transform: rotate(180deg);
+        transform: scale(1.45) rotate(180deg);
       }
       .panel-collapsed {
         width: 44px;
@@ -490,14 +534,6 @@ function injectPanel() {
         display: none;
       }
       .panel-collapsed .collapse-toggle {
-        position: relative;
-        top: auto;
-        right: auto;
-        margin: 8px;
-        width: 44px;
-        height: 44px;
-        font-size: 20px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.1);
         pointer-events: auto;  /* 仅按钮可点击 */
       }
       .card {
@@ -525,7 +561,7 @@ function injectPanel() {
         </div>
       </div>
       <button class="collapse-toggle" id="collapseBtn" title="${STATE.panelCollapsed ? 'Expand panel' : 'Collapse panel'}">
-        <span class="collapse-icon">▼</span>
+        <span class="collapse-icon">⚙</span>
       </button>
     </div>
   `;
@@ -566,9 +602,11 @@ function injectPanel() {
     if (STATE.panelCollapsed) {
       $panel.classList.add('panel-collapsed');
       $collapseBtn.title = 'Expand panel';
+      host.style.width = '60px';  // 收起时缩小host宽度
     } else {
       $panel.classList.remove('panel-collapsed');
       $collapseBtn.title = 'Collapse panel';
+      host.style.width = '300px';  // 展开时恢复host宽度
     }
     // 保存面板收起状态
     chrome.storage.sync.set({ panelCollapsed: STATE.panelCollapsed });
@@ -576,8 +614,10 @@ function injectPanel() {
 
   // 拖拽相关变量
   let isDragging = false;
+  let isRealDrag = false;  // 标记是否为真正的拖拽
   let dragStartX, dragStartY;
   let originalX, originalY;
+  let dragStartTime = 0;  // 拖拽开始时间
 
   // 鼠标按下事件 - 开始拖拽
   $collapseBtn.addEventListener('mousedown', (e) => {
@@ -585,6 +625,8 @@ function injectPanel() {
     if (!STATE.panelCollapsed) return;
 
     isDragging = true;
+    isRealDrag = false;  // 初始假设不是拖拽
+    dragStartTime = Date.now();  // 记录开始时间
     dragStartX = e.clientX;
     dragStartY = e.clientY;
 
@@ -593,6 +635,7 @@ function injectPanel() {
     originalY = window.innerHeight - rect.bottom;
 
     e.preventDefault();
+    e.stopPropagation();  // 阻止事件冒泡
   });
 
   // 鼠标移动事件 - 拖拽中
@@ -601,21 +644,37 @@ function injectPanel() {
 
     const deltaX = e.clientX - dragStartX;
     const deltaY = dragStartY - e.clientY;  // Y轴反向（bottom定位）
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+    const elapsed = Date.now() - dragStartTime;
 
-    const newX = originalX + deltaX;
-    const newY = originalY + deltaY;
+    // 判断是否为真正的拖拽（时间超过300ms 或 移动超过5px）
+    if (!isRealDrag && (elapsed > 300 || distance > 5)) {
+      isRealDrag = true;
+    }
 
-    host.style.left = `${newX}px`;
-    host.style.bottom = `${newY}px`;
+    if (isRealDrag) {
+      const newX = originalX + deltaX;
+      const newY = originalY + deltaY;
+
+      host.style.left = `${newX}px`;
+      host.style.bottom = `${newY}px`;
+    }
   });
 
   // 鼠标释放事件 - 结束拖拽
   document.addEventListener('mouseup', (e) => {
     if (!isDragging) return;
-    isDragging = false;
 
-    // 边缘吸附逻辑
-    snapToEdge(host);
+    if (isRealDrag) {
+      // 是拖拽操作：执行吸附，不触发展开
+      snapToEdge(host);
+      e.preventDefault();
+      e.stopPropagation();  // 阻止触发click事件
+    }
+    // 如果不是拖拽（isRealDrag=false），则允许click事件触发展开
+
+    isDragging = false;
+    isRealDrag = false;
   });
 
   // 边缘吸附函数

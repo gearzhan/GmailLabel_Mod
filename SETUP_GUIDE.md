@@ -2,6 +2,13 @@
 
 This guide will help you set up the Gmail Multi-Label Picker Chrome Extension with OAuth authentication.
 
+A Chrome Extension that enhances Gmail's label management with multi-select filtering, custom grouping, and advanced organization features.
+
+Note,
+
+1. requires OAuth 2.0 Client ID with Gmail API enable.
+2. Creat CLient ID for Web Application, and fill Autherised redirect URLs : https://gpfghhempenkdpnekpjggkccfmjbfoid.chromiumapp.org/
+
 ## Prerequisites
 
 - Google Account
@@ -110,6 +117,7 @@ This guide will help you set up the Gmail Multi-Label Picker Chrome Extension wi
 ## Step 7: Using the Extension
 
 ### Expanding/Collapsing the Panel
+
 - Click the blue FAB button to toggle the panel
 - State is saved automatically (persists across page reloads)
 

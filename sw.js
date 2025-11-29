@@ -119,7 +119,23 @@ async function fetchLabels() {
     }
 
     const data = await response.json();
-    return data.labels || [];
+    const labels = data.labels || [];
+
+    // 提取并存储颜色映射
+    const colorMap = {};
+    labels.forEach(label => {
+      if (label.color) {
+        colorMap[label.id] = {
+          backgroundColor: label.color.backgroundColor || null,
+          textColor: label.color.textColor || null
+        };
+      }
+    });
+
+    // 保存颜色映射到storage
+    await chrome.storage.sync.set({ labelColorMap: colorMap });
+
+    return labels;
   } catch (error) {
     console.error('Fetch labels error:', error);
     throw error;
