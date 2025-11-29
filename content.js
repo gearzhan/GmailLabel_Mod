@@ -254,13 +254,17 @@ function renderLabels(container) {
       const safeDisplayName = escapeHtml(displayName);
       const safeLabelName = escapeHtml(label.name);
 
+      // 检测嵌套标签（包含 /）
+      const isNested = label.name.includes('/');
+      const nestedClass = isNested ? 'nested-label' : '';
+
       // 使用MD3基础样式，label颜色作为左边框装饰
       const style = isSelected
         ? `border-left: 3px solid ${colors.backgroundColor};`
         : `border-left: 3px solid ${colors.backgroundColor}; opacity: 0.7;`;
 
       html += `
-        <div class="label-item ${isSelected ? 'selected' : ''}"
+        <div class="label-item ${isSelected ? 'selected' : ''} ${nestedClass}"
              data-label="${safeLabelName}"
              style="${style}">
           ${safeDisplayName}
@@ -316,37 +320,6 @@ function renderPanel() {
   if (!shadow) return;
 
   const $labelList = shadow.getElementById('labelList');
-  const $chipsContainer = shadow.getElementById('chipsContainer');
-  const $modeBtn = shadow.getElementById('modeBtn');
-
-  // 渲染chips（选中的标签）
-  if ($chipsContainer) {
-    $chipsContainer.innerHTML = '';
-
-    if (STATE.selected.size > 0) {
-      STATE.selected.forEach(labelName => {
-        const displayName = getDisplayName(labelName);
-        const chip = document.createElement('div');
-        chip.className = 'chip';
-        chip.innerHTML = `
-          <span>${escapeHtml(displayName)}</span>
-          <span class="chip-remove" data-label="${escapeHtml(labelName)}">×</span>
-        `;
-
-        // 绑定移除事件
-        chip.querySelector('.chip-remove').addEventListener('click', (e) => {
-          e.stopPropagation();
-          STATE.selected.delete(labelName);
-          renderPanel();
-        });
-
-        $chipsContainer.appendChild(chip);
-      });
-      $chipsContainer.style.display = 'flex';
-    } else {
-      $chipsContainer.style.display = 'none';
-    }
-  }
 
   // 渲染标签列表
   if ($labelList) {
@@ -367,7 +340,7 @@ function injectPanel() {
     position: fixed;
     bottom: ${STATE.panelPosition.y}px;
     left: ${STATE.panelPosition.x}px;
-    width: ${STATE.panelCollapsed ? '56px' : '320px'};
+    width: ${STATE.panelCollapsed ? '32px' : '320px'};
     z-index: 9999;
     font-family: 'Google Sans', 'Roboto', Arial, sans-serif;
   `;
@@ -453,66 +426,44 @@ function injectPanel() {
         transition: opacity 0.2s ease, transform 0.2s ease;
       }
       .panel-content {
-        padding: 12px;
-      }
-      /* Chips Container - MD3 Input Chips */
-      .chips-container {
-        padding: 0 12px 12px 12px;
+        padding: 10px;
         display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        max-height: 120px;
-        overflow-y: auto;
-        border-bottom: 1px solid var(--md-sys-color-outline-variant);
-        margin-bottom: 8px;
-      }
-      .chip {
-        background: var(--md-sys-color-secondary-container);
-        color: var(--md-sys-color-on-secondary-container);
-        border-radius: var(--md-sys-shape-corner-small);
-        padding: 6px 4px 6px 12px;
-        font-size: 14px;
-        font-weight: 500;
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        animation: chipFadeIn 0.2s ease;
-        user-select: none;
-      }
-      .chip-remove {
-        cursor: pointer;
-        font-size: 18px;
-        font-weight: 400;
-        opacity: 0.6;
-        padding: 0 6px;
-        margin: -2px -2px -2px 2px;
-        border-radius: var(--md-sys-shape-corner-extra-small);
-        transition: all 0.15s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .chip-remove:hover {
-        opacity: 1;
-        background: rgba(0, 0, 0, 0.1);
-      }
-      @keyframes chipFadeIn {
-        from { opacity: 0; transform: scale(0.8); }
-        to { opacity: 1; transform: scale(1); }
+        flex-direction: column;
+        max-height: 500px;
       }
       .controls {
+        flex-shrink: 0;
         display: flex;
-        gap: 8px;
-        margin-bottom: 10px;
+        gap: 7px;
+        margin-bottom: 6px;
+        margin-top: 6px;
+        padding-top: 6px;
+        border-top: 1px solid #e5e7eb;
         flex-wrap: wrap;
       }
-      .filter-input {
+      .filter-container {
+        position: relative;
         flex: 1;
         min-width: 140px;
-        padding: 8px 12px;
+      }
+      .filter-icon {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 14px;
+        height: 14px;
+        color: var(--md-sys-color-on-surface-variant);
+        pointer-events: none;
+        opacity: 0.6;
+      }
+      .filter-input {
+        width: 100%;
+        padding: 7px 11px 7px 30px;
         border: 1px solid var(--md-sys-color-outline-variant);
-        border-radius: 24px;
-        font-size: 13px;
+        border-radius: 20px;
+        font-size: 12px;
+        height: 30px;
         outline: none;
         background: var(--md-sys-color-surface-container);
         color: var(--md-sys-color-on-surface);
@@ -521,42 +472,67 @@ function injectPanel() {
         border-color: var(--md-sys-color-primary);
         background: var(--md-sys-color-surface);
       }
-      /* Segmented Button Control - MD3 */
+      /* Sliding Pill Toggle - MD3 */
       .mode-switch {
+        position: relative;
         display: flex;
         background: var(--md-sys-color-surface-container-high);
-        border-radius: 20px;
+        border-radius: 18px;
         padding: 3px;
         gap: 2px;
+        height: 30px;
+        cursor: pointer;
+        min-width: 90px;
+      }
+      /* Animated sliding pill background */
+      .toggle-pill {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: calc(50% - 4px);
+        height: calc(100% - 6px);
+        background: var(--md-sys-color-secondary-container);
+        border-radius: 14px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        transition: transform 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
+        z-index: 1;
+        pointer-events: none;
+      }
+      /* Slide pill right when ANY mode */
+      .mode-switch.mode-any .toggle-pill {
+        transform: translateX(calc(100% + 2px));
       }
       .mode-option {
-        padding: 6px 16px;
-        border-radius: 16px;
-        font-size: 12px;
-        font-weight: 500;
+        flex: 1;
+        padding: 5px 12px;
+        border-radius: 14px;
+        font-size: 11px;
+        font-weight: 600;
         cursor: pointer;
         border: none;
         background: transparent;
         color: var(--md-sys-color-on-surface-variant);
-        transition: all 0.2s;
+        transition: color 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
         white-space: nowrap;
+        z-index: 2;
+        position: relative;
+        text-align: center;
       }
       .mode-option.active {
-        background: var(--md-sys-color-secondary-container);
         color: var(--md-sys-color-on-secondary-container);
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
       }
       .mode-option:hover:not(.active) {
-        background: rgba(0, 0, 0, 0.05);
+        color: var(--md-sys-color-on-surface);
       }
       .btn {
-        padding: 6px 12px;
+        padding: 5px 11px;
         border: 1px solid #d1d5db;
         border-radius: 6px;
         background: #f9fafb;
         cursor: pointer;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 500;
+        height: 26px;
         transition: all 0.15s;
         white-space: nowrap;
       }
@@ -580,11 +556,27 @@ function injectPanel() {
       .btn.mode-or:hover {
         background: #d97706;
       }
+      .btn.text-link {
+        background: transparent;
+        border: none;
+        color: var(--md-sys-color-on-surface-variant);
+        padding: 5px 8px;
+        text-decoration: underline;
+        text-decoration-color: transparent;
+        transition: all 0.15s;
+        height: auto;
+      }
+      .btn.text-link:hover {
+        background: transparent;
+        color: var(--md-sys-color-primary);
+        text-decoration-color: var(--md-sys-color-primary);
+      }
       .label-list {
-        max-height: 400px;
+        flex: 1;
         overflow-y: auto;
-        border-top: 1px solid #e5e7eb;
-        padding-top: 10px;
+        border-top: none;
+        padding-top: 0;
+        margin-bottom: 0;
       }
       .label-list::-webkit-scrollbar {
         width: 5px;
@@ -598,20 +590,20 @@ function injectPanel() {
         border-radius: 3px;
       }
       .label-group {
-        margin-bottom: 12px;
+        margin-bottom: 6px;
       }
       .group-header {
         display: flex;
         align-items: center;
-        gap: 6px;
-        padding: 6px 8px;
+        gap: 4px;
+        padding: 5px 7px;
         background: #f9fafb;
         border-radius: 4px;
         cursor: pointer;
         user-select: none;
-        margin-bottom: 6px;
+        margin-bottom: 4px;
         font-weight: 500;
-        font-size: 12px;
+        font-size: 11px;
         color: #374151;
       }
       .group-header:hover {
@@ -632,18 +624,19 @@ function injectPanel() {
       .group-labels {
         display: flex;
         flex-wrap: wrap;
-        gap: 3px;
-        padding-left: 12px;
+        gap: 2px;
+        padding-left: 8px;
       }
       .label-item {
-        padding: 6px 16px;
-        margin: 3px 0;
+        padding: 3px 12px;
+        margin: 1px 0;
         cursor: pointer;
         user-select: none;
-        transition: all 0.15s;
-        font-size: 13px;
+        transition: all 0.15s cubic-bezier(0.2, 0.0, 0, 1.0);
+        font-size: 11px;
         font-weight: 400;
-        border-radius: 20px;
+        border-radius: 16px;
+        line-height: 1.3;
         white-space: nowrap;
         border: 1px solid transparent;
         color: var(--md-sys-color-on-surface);
@@ -651,6 +644,8 @@ function injectPanel() {
       }
       .label-item:hover {
         background: var(--md-sys-color-surface-container-high);
+        transform: translateX(2px);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
       }
       .label-item.selected {
         background: var(--md-sys-color-primary-container);
@@ -661,10 +656,16 @@ function injectPanel() {
       .label-item.selected:hover {
         filter: brightness(0.95);
       }
+      .label-item.nested-label {
+        margin-left: 10px;
+        border-left: 2px solid var(--md-sys-color-outline-variant);
+        padding-left: 10px;
+      }
       .action-bar {
-        margin-top: 10px;
-        padding-top: 10px;
-        border-top: 1px solid #e5e7eb;
+        flex-shrink: 0;
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
         display: flex;
         justify-content: flex-end;
         align-items: center;
@@ -693,13 +694,13 @@ function injectPanel() {
       }
       .collapse-toggle {
         position: fixed;
-        width: 56px;
-        height: 56px;
+        width: 32px;
+        height: 32px;
         border-radius: 50%;
         background: var(--md-sys-color-primary-container);
         color: var(--md-sys-color-on-primary-container);
         border: none;
-        cursor: pointer;
+        cursor: grab;
         font-size: 24px;
         display: flex;
         align-items: center;
@@ -716,11 +717,16 @@ function injectPanel() {
         filter: brightness(0.95);
       }
       .collapse-toggle:active {
+        cursor: grabbing;
         transform: scale(1.0);
       }
+      .collapse-toggle.dragging {
+        cursor: grabbing;
+        transition: none;
+      }
       .panel-collapsed {
-        width: 56px;
-        height: 56px;
+        width: 32px;
+        height: 32px;
         background: transparent;
         border: none;
         box-shadow: none;
@@ -739,24 +745,29 @@ function injectPanel() {
     <div class="card ${STATE.panelCollapsed ? 'panel-collapsed' : ''}" id="panel">
       <div class="panel-content">
         <div id="errorContainer"></div>
-        <div class="controls">
-          <input
-            type="search"
-            class="filter-input"
-            id="filterInput"
-            placeholder="🔍 Filter labels..."
-          />
-          <div class="mode-switch" id="modeSwitch">
-            <button class="mode-option ${STATE.mode === 'AND' ? 'active' : ''}" data-val="AND">ALL</button>
-            <button class="mode-option ${STATE.mode === 'OR' ? 'active' : ''}" data-val="OR">ANY</button>
-          </div>
-        </div>
-        <div class="chips-container" id="chipsContainer" style="display: none;"></div>
         <div class="label-list" id="labelList">
           <div class="loading">Loading labels...</div>
         </div>
+        <div class="controls">
+          <div class="filter-container">
+            <svg class="filter-icon" width="16" height="16" viewBox="0 0 128 128" fill="currentColor">
+              <path d="M42 60L52 70L70 45" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <input
+              type="search"
+              class="filter-input"
+              id="filterInput"
+              placeholder="Filter labels..."
+            />
+          </div>
+          <div class="mode-switch ${STATE.mode === 'OR' ? 'mode-any' : ''}" id="modeSwitch">
+            <div class="toggle-pill"></div>
+            <button class="mode-option ${STATE.mode === 'AND' ? 'active' : ''}" data-val="AND">AND</button>
+            <button class="mode-option ${STATE.mode === 'OR' ? 'active' : ''}" data-val="OR">OR</button>
+          </div>
+        </div>
         <div class="action-bar">
-          <button class="btn" id="clearBtn">Clear</button>
+          <button class="btn text-link" id="clearBtn">Clear</button>
           <button class="btn primary" id="searchBtn">Search</button>
         </div>
       </div>
@@ -783,13 +794,21 @@ function injectPanel() {
     renderPanel();
   });
 
-  // 绑定分段按钮事件
+  // 绑定滑动切换按钮事件
   $modeSwitch.querySelectorAll('.mode-option').forEach(btn => {
     btn.addEventListener('click', () => {
       STATE.mode = btn.dataset.val;
+
       // 更新active状态
       $modeSwitch.querySelectorAll('.mode-option').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+
+      // 切换滑动pill动画
+      if (STATE.mode === 'OR') {
+        $modeSwitch.classList.add('mode-any');
+      } else {
+        $modeSwitch.classList.remove('mode-any');
+      }
     });
   });
 
@@ -810,7 +829,7 @@ function injectPanel() {
     if (STATE.panelCollapsed) {
       $panel.classList.add('panel-collapsed');
       $collapseBtn.title = 'Expand panel';
-      host.style.width = '56px';  // 收起时缩小host宽度
+      host.style.width = '32px';  // 收起时缩小host宽度
     } else {
       $panel.classList.remove('panel-collapsed');
       $collapseBtn.title = 'Collapse panel';
@@ -859,6 +878,9 @@ function injectPanel() {
     originalX = rect.left;
     originalY = window.innerHeight - rect.bottom;
 
+    // 添加拖拽类，显示 grabbing 光标
+    $collapseBtn.classList.add('dragging');
+
     e.preventDefault();
     e.stopPropagation();  // 阻止事件冒泡
   });
@@ -881,6 +903,8 @@ function injectPanel() {
       const newX = originalX + deltaX;
       const newY = originalY + deltaY;
 
+      // 实时更新位置（无过渡）
+      host.style.transition = 'none';
       host.style.left = `${newX}px`;
       host.style.bottom = `${newY}px`;
     }
@@ -889,6 +913,9 @@ function injectPanel() {
   // 鼠标释放事件 - 结束拖拽
   document.addEventListener('mouseup', (e) => {
     if (!isDragging) return;
+
+    // 移除拖拽类
+    $collapseBtn.classList.remove('dragging');
 
     if (isRealDrag) {
       // 是拖拽操作：执行吸附，不触发展开
@@ -923,11 +950,12 @@ function injectPanel() {
     // Y轴限制在安全范围内
     const finalY = Math.max(16, Math.min(currentY, windowHeight - rect.height - 16));
 
-    // 动画过渡
-    host.style.transition = 'left 0.3s ease, bottom 0.3s ease';
+    // 添加平滑过渡动画到最终位置
+    host.style.transition = 'left 0.3s cubic-bezier(0.4, 0.0, 0.2, 1), bottom 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)';
     host.style.left = `${finalX}px`;
     host.style.bottom = `${finalY}px`;
 
+    // 清除过渡，准备下次拖拽
     setTimeout(() => {
       host.style.transition = '';
     }, 300);
