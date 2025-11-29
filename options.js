@@ -98,6 +98,86 @@ function showMessage(text, type = 'success') {
   }, 3000);
 }
 
+// 导出配置
+async function exportConfiguration() {
+  await loadConfig();  // 确保数据最新
+
+  const exportData = {
+    version: "1.0",
+    exportDate: new Date().toISOString(),
+    data: {
+      displayNameMap,
+      groups,
+      labelGroups,
+      hidden: Array.from(hidden),
+      collapsedGroups: Array.from(collapsedGroups)
+    }
+  };
+
+  // 生成文件名：GLabel_Config_YYYY-MM-DD.json
+  const dateStr = new Date().toISOString().split('T')[0];
+  const filename = `GLabel_Config_${dateStr}.json`;
+
+  // 创建下载
+  const blob = new Blob([JSON.stringify(exportData, null, 2)],
+                        { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  showMessage('Configuration exported successfully!', 'success');
+}
+
+// 导入配置
+async function importConfiguration(file) {
+  try {
+    const text = await file.text();
+    const importData = JSON.parse(text);
+
+    // 验证数据格式
+    if (!importData.version || !importData.data) {
+      throw new Error('Invalid configuration file format');
+    }
+
+    // 数据一致性检查
+    const data = importData.data;
+
+    // 验证所有labelGroups引用的groupId都存在
+    if (data.labelGroups && data.groups) {
+      for (const [labelId, groupId] of Object.entries(data.labelGroups)) {
+        if (groupId !== 'system' && groupId !== 'ungrouped' &&
+            !data.groups[groupId]) {
+          console.warn(`Invalid group reference: ${groupId} for label ${labelId}`);
+          delete data.labelGroups[labelId];
+        }
+      }
+    }
+
+    // 导入数据
+    displayNameMap = data.displayNameMap || {};
+    groups = data.groups || {};
+    labelGroups = data.labelGroups || {};
+    hidden = new Set(data.hidden || []);
+    collapsedGroups = new Set(data.collapsedGroups || []);
+
+    // 保存到storage
+    await saveConfig();
+
+    // 重新渲染
+    await loadLabels();
+
+    showMessage(
+      `Configuration imported successfully from ${importData.exportDate}`,
+      'success'
+    );
+  } catch (error) {
+    showMessage(`Import failed: ${error.message}`, 'error');
+  }
+}
+
 // 更新认证状态
 async function updateAuthStatus() {
   const $authStatus = document.getElementById('authStatus');
@@ -585,4 +665,19 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('saveBtn').addEventListener('click', save);
   document.getElementById('resetBtn').addEventListener('click', reset);
   document.getElementById('refreshBtn').addEventListener('click', loadLabels);
+
+  // 导入导出按钮事件
+  document.getElementById('exportBtn').addEventListener('click', exportConfiguration);
+
+  document.getElementById('importBtn').addEventListener('click', () => {
+    document.getElementById('importFile').click();
+  });
+
+  document.getElementById('importFile').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      importConfiguration(file);
+    }
+    e.target.value = '';  // 清空，允许重复导入同一文件
+  });
 });

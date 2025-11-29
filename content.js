@@ -9,7 +9,8 @@ const STATE = {
   groups: {},         // 自定义分组 { groupId: { name, labelIds: [], collapsed: false } }
   labelGroups: {},    // 标签到分组的映射 { labelId: groupId }
   collapsedGroups: new Set(), // 收起的分组 ID
-  panelCollapsed: true // 面板是否收起（默认收起）
+  panelCollapsed: true, // 面板是否收起（默认收起）
+  panelPosition: { x: 12, y: 16 }  // 面板位置（左边距、底边距）
 };
 
 // 从存储加载配置
@@ -22,7 +23,8 @@ async function loadConfig() {
       'groups',
       'labelGroups',
       'collapsedGroups',
-      'panelCollapsed'
+      'panelCollapsed',
+      'panelPosition'
     ], (data) => {
       STATE.displayNameMap = data.displayNameMap || {};
       STATE.order = data.order || [];
@@ -32,6 +34,8 @@ async function loadConfig() {
       STATE.collapsedGroups = new Set(data.collapsedGroups || []);
       // 加载面板收起状态，如果未设置则使用默认值（true）
       STATE.panelCollapsed = data.panelCollapsed !== undefined ? data.panelCollapsed : true;
+      // 加载面板位置，如果未设置则使用默认值（左下角）
+      STATE.panelPosition = data.panelPosition || { x: 12, y: 16 };
       resolve();
     });
   });
@@ -252,10 +256,11 @@ function injectPanel() {
   // 创建容器
   const host = document.createElement('div');
   host.id = 'mlp-root';
+  // 使用STATE中保存的位置
   host.style.cssText = `
     position: fixed;
-    bottom: 16px;
-    left: 12px;
+    bottom: ${STATE.panelPosition.y}px;
+    left: ${STATE.panelPosition.x}px;
     width: 300px;
     z-index: 9999;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
@@ -479,6 +484,7 @@ function injectPanel() {
         background: transparent;
         border: none;
         box-shadow: none;
+        pointer-events: none;  /* 整个面板不捕获点击事件 */
       }
       .panel-collapsed .panel-content {
         display: none;
@@ -492,6 +498,7 @@ function injectPanel() {
         height: 44px;
         font-size: 20px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.1);
+        pointer-events: auto;  /* 仅按钮可点击 */
       }
       .card {
         transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
@@ -565,6 +572,92 @@ function injectPanel() {
     }
     // 保存面板收起状态
     chrome.storage.sync.set({ panelCollapsed: STATE.panelCollapsed });
+  });
+
+  // 拖拽相关变量
+  let isDragging = false;
+  let dragStartX, dragStartY;
+  let originalX, originalY;
+
+  // 鼠标按下事件 - 开始拖拽
+  $collapseBtn.addEventListener('mousedown', (e) => {
+    // 仅收起状态下可拖拽
+    if (!STATE.panelCollapsed) return;
+
+    isDragging = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+
+    const rect = host.getBoundingClientRect();
+    originalX = rect.left;
+    originalY = window.innerHeight - rect.bottom;
+
+    e.preventDefault();
+  });
+
+  // 鼠标移动事件 - 拖拽中
+  document.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+
+    const deltaX = e.clientX - dragStartX;
+    const deltaY = dragStartY - e.clientY;  // Y轴反向（bottom定位）
+
+    const newX = originalX + deltaX;
+    const newY = originalY + deltaY;
+
+    host.style.left = `${newX}px`;
+    host.style.bottom = `${newY}px`;
+  });
+
+  // 鼠标释放事件 - 结束拖拽
+  document.addEventListener('mouseup', (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+
+    // 边缘吸附逻辑
+    snapToEdge(host);
+  });
+
+  // 边缘吸附函数
+  function snapToEdge(host) {
+    const rect = host.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    const centerX = rect.left + rect.width / 2;
+    const currentY = windowHeight - rect.bottom;
+
+    let finalX;
+    if (centerX < windowWidth / 2) {
+      // 吸附到左边
+      finalX = 12;
+    } else {
+      // 吸附到右边
+      finalX = windowWidth - rect.width - 12;
+    }
+
+    // Y轴限制在安全范围内
+    const finalY = Math.max(16, Math.min(currentY, windowHeight - rect.height - 16));
+
+    // 动画过渡
+    host.style.transition = 'left 0.3s ease, bottom 0.3s ease';
+    host.style.left = `${finalX}px`;
+    host.style.bottom = `${finalY}px`;
+
+    setTimeout(() => {
+      host.style.transition = '';
+    }, 300);
+
+    // 保存位置
+    STATE.panelPosition = { x: finalX, y: finalY };
+    chrome.storage.sync.set({ panelPosition: STATE.panelPosition });
+  }
+
+  // 窗口大小变化时重新吸附
+  window.addEventListener('resize', () => {
+    if (STATE.panelCollapsed) {
+      snapToEdge(host);
+    }
   });
 
   // 加载数据
