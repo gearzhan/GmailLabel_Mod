@@ -499,6 +499,7 @@ function createGroupColumn(groupId, groupName, labels) {
   dropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    dropZone.style.background = 'var(--md-sys-color-primary-container)';
 
     const dragging = document.querySelector('.dragging');
     if (!dragging) return;
@@ -511,10 +512,24 @@ function createGroupColumn(groupId, groupName, labels) {
     }
   });
 
+  // 拖拽离开事件
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.style.background = '';
+  });
+
   // 放置事件
   dropZone.addEventListener('drop', async (e) => {
     e.preventDefault();
+    dropZone.style.background = '';
+
     const labelId = e.dataTransfer.getData('text/plain');
+
+    // 更新分组归属
+    if (groupId === 'ungrouped') {
+      delete labelGroups[labelId];
+    } else {
+      labelGroups[labelId] = groupId;
+    }
 
     // 等待 DOM 更新完成再读取顺序
     requestAnimationFrame(() => {
@@ -523,7 +538,9 @@ function createGroupColumn(groupId, groupName, labels) {
         updateLabelOrder(groupId, dropZone);
         await saveConfig();
         console.log(`[Order] Saved for ${groupId}:`, order[groupId]);
-        showMessage('Label order updated', 'success');
+        showMessage('Label moved', 'success');
+        // 重新渲染以显示更新
+        renderCardGrid();
       });
     });
   });
@@ -671,7 +688,7 @@ function renderMultiSelectToolbar() {
   return toolbar;
 }
 
-// 渲染卡片网格
+// 渲染卡片网格 - Kanban Board Layout
 function renderCardGrid() {
   const $container = document.getElementById('labelTableContainer');
 
@@ -689,50 +706,53 @@ function renderCardGrid() {
     return;
   }
 
-  // 按分组组织标签
-  const groupedLabels = {
-    system: [],
-    ungrouped: [],
-    ...Object.keys(groups).reduce((acc, gid) => ({ ...acc, [gid]: [] }), {})
+  // 准备数据桶
+  const buckets = {
+    'ungrouped': [],
+    'system': [],
+    ...Object.keys(groups).reduce((acc, id) => ({...acc, [id]: []}), {})
   };
 
+  // 分配标签到桶
   filteredLabels.forEach(label => {
     const groupId = labelGroups[label.id] ||
                    (label.type === 'system' ? 'system' : 'ungrouped');
-    if (groupedLabels[groupId]) {
-      groupedLabels[groupId].push(label);
+    if (buckets[groupId]) {
+      buckets[groupId].push(label);
     } else {
-      // 如果分组不存在，放入未分组
-      groupedLabels.ungrouped.push(label);
+      buckets['ungrouped'].push(label);
     }
   });
 
-  // 创建网格容器
-  const grid = document.createElement('div');
-  grid.id = 'labelGridContainer';
+  // 定义列顺序: Ungrouped -> System -> Custom Groups
+  const columnOrder = ['ungrouped', 'system', ...Object.keys(groups)];
 
-  // 渲染多选工具栏（如果有选中项）
+  // 创建Board容器
+  const board = document.createElement('div');
+  board.id = 'labelGridContainer';
+
+  // 渲染多选工具栏（如果有选中项）- 固定定位，不在grid内
   const toolbar = renderMultiSelectToolbar();
   if (toolbar) {
-    grid.appendChild(toolbar);
+    document.body.appendChild(toolbar);
   }
 
-  // 按顺序渲染分组列：自定义分组 -> System -> Ungrouped
-  const groupOrder = [...Object.keys(groups), 'system', 'ungrouped'];
+  // 渲染列
+  columnOrder.forEach(groupId => {
+    const labels = buckets[groupId] || [];
 
-  groupOrder.forEach(groupId => {
-    const labels = groupedLabels[groupId] || [];
+    // 获取分组名称
+    let groupName = groups[groupId]?.name;
+    if (groupId === 'system') groupName = "⚙️ System";
+    if (groupId === 'ungrouped') groupName = "📥 Ungrouped";
 
-    const groupName = groupId === 'system' ? 'System' :
-                     groupId === 'ungrouped' ? 'Ungrouped' :
-                     groups[groupId].name;
-
+    // 创建列
     const column = createGroupColumn(groupId, groupName, labels);
-    grid.appendChild(column);
+    board.appendChild(column);
   });
 
   $container.innerHTML = '';
-  $container.appendChild(grid);
+  $container.appendChild(board);
 
   updateStats();
 }

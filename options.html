@@ -5,6 +5,63 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gmail Multi-Label Picker - 设置</title>
   <style>
+    /* Material Design 3 Design Tokens - Gmail themed */
+    :root {
+      /* Primary Colors */
+      --md-sys-color-primary: #0b57d0;
+      --md-sys-color-on-primary: #ffffff;
+      --md-sys-color-primary-container: #d3e3fd;
+      --md-sys-color-on-primary-container: #041e49;
+
+      /* Secondary Colors */
+      --md-sys-color-secondary: #5a5d72;
+      --md-sys-color-on-secondary: #ffffff;
+      --md-sys-color-secondary-container: #e8def8;
+      --md-sys-color-on-secondary-container: #1d192b;
+
+      /* Surface Colors */
+      --md-sys-color-surface: #fdfcff;
+      --md-sys-color-surface-dim: #dfe2eb;
+      --md-sys-color-surface-bright: #fdfcff;
+      --md-sys-color-surface-container-lowest: #ffffff;
+      --md-sys-color-surface-container-low: #f7f9ff;
+      --md-sys-color-surface-container: #f0f4f9;
+      --md-sys-color-surface-container-high: #e8ebed;
+      --md-sys-color-surface-container-highest: #e3e5e8;
+      --md-sys-color-on-surface: #1a1c1e;
+      --md-sys-color-on-surface-variant: #44474e;
+
+      /* Outline */
+      --md-sys-color-outline: #747775;
+      --md-sys-color-outline-variant: #c4c6c4;
+
+      /* Error Colors */
+      --md-sys-color-error: #ba1a1a;
+      --md-sys-color-on-error: #ffffff;
+      --md-sys-color-error-container: #ffdad6;
+      --md-sys-color-on-error-container: #410002;
+
+      /* Elevation Shadows - MD3 Standard */
+      --md-elevation-1:
+        0px 1px 2px 0px rgba(0, 0, 0, 0.3),
+        0px 1px 3px 1px rgba(0, 0, 0, 0.15);
+      --md-elevation-2:
+        0px 1px 2px 0px rgba(0, 0, 0, 0.3),
+        0px 2px 6px 2px rgba(0, 0, 0, 0.15);
+      --md-elevation-3:
+        0px 4px 8px 3px rgba(0, 0, 0, 0.15),
+        0px 1px 3px rgba(0, 0, 0, 0.3);
+
+      /* Shape Tokens */
+      --md-sys-shape-corner-none: 0px;
+      --md-sys-shape-corner-extra-small: 4px;
+      --md-sys-shape-corner-small: 8px;
+      --md-sys-shape-corner-medium: 12px;
+      --md-sys-shape-corner-large: 16px;
+      --md-sys-shape-corner-extra-large: 28px;
+      --md-sys-shape-corner-full: 9999px;
+    }
+
     * {
       box-sizing: border-box;
       margin: 0;
@@ -12,19 +69,19 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      background: #f9fafb;
+      font-family: 'Google Sans', 'Roboto', Arial, sans-serif;
+      background: var(--md-sys-color-surface-container-low);
       padding: 24px;
       line-height: 1.6;
-      color: #111827;
+      color: var(--md-sys-color-on-surface);
     }
 
     .container {
-      max-width: 900px;
+      max-width: 1400px;
       margin: 0 auto;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      background: var(--md-sys-color-surface);
+      border-radius: var(--md-sys-shape-corner-medium);
+      box-shadow: var(--md-elevation-1);
       padding: 32px;
     }
 
@@ -309,52 +366,65 @@
       font-size: 13px;
     }
 
-    /* 卡片网格布局样式 */
+    /* Kanban Board Layout - MD3 */
+    #boardContainer,
     #labelGridContainer {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      display: flex;
+      overflow-x: auto;
       gap: 16px;
+      padding: 16px 0;
+      align-items: flex-start;
+      min-height: 500px;
       margin-top: 16px;
     }
 
+    .board-column,
     .group-column {
-      background: #f9fafb;
-      border: 2px solid #e5e7eb;
-      border-radius: 8px;
-      min-height: 200px;
+      min-width: 300px;
+      width: 300px;
+      background: var(--md-sys-color-surface-container);
+      border: none;
+      border-radius: var(--md-sys-shape-corner-medium);
+      max-height: calc(100vh - 200px);
       display: flex;
       flex-direction: column;
+      flex-shrink: 0;
+      box-shadow: var(--md-elevation-1);
     }
 
+    .column-header,
     .group-header {
-      padding: 12px 16px;
-      background: #f3f4f6;
-      border-bottom: 2px solid #e5e7eb;
-      border-radius: 6px 6px 0 0;
+      padding: 16px;
+      background: var(--md-sys-color-surface-container-high);
+      border-bottom: none;
+      border-radius: var(--md-sys-shape-corner-medium) var(--md-sys-shape-corner-medium) 0 0;
       display: flex;
       justify-content: space-between;
       align-items: center;
       font-weight: 600;
-      color: #374151;
-    }
-
-    .group-header .label-count {
-      font-size: 13px;
-      font-weight: 500;
-      color: #6b7280;
-      background: white;
-      padding: 2px 8px;
-      border-radius: 12px;
-    }
-
-    .group-header {
-      font-size: 14px;
+      color: var(--md-sys-color-on-surface);
       cursor: pointer;
       user-select: none;
     }
 
+    .column-header .label-count,
+    .group-header .label-count {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--md-sys-color-on-surface-variant);
+      background: var(--md-sys-color-surface);
+      padding: 2px 8px;
+      border-radius: var(--md-sys-shape-corner-medium);
+    }
+
+    .column-header,
+    .group-header {
+      font-size: 14px;
+    }
+
+    .column-header:hover,
     .group-header:hover {
-      background: #e5e7eb;
+      background: var(--md-sys-color-surface-container-highest);
     }
 
     /* 收起/展开按钮 */
@@ -373,10 +443,12 @@
       display: none;
     }
 
+    .column-body,
     .group-drop-zone {
       padding: 12px;
-      min-height: 150px;
+      overflow-y: auto;
       flex: 1;
+      min-height: 100px;
     }
 
     .label-card {
@@ -526,32 +598,45 @@
       font-size: 16px;
     }
 
-    /* 多选工具栏 */
+    /* 多选工具栏 - Floating Pill MD3 */
     .multi-select-toolbar {
-      position: sticky;
-      top: 0;
-      background: #eff6ff;
-      border: 2px solid #3b82f6;
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-bottom: 16px;
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--md-sys-color-primary);
+      color: var(--md-sys-color-on-primary);
+      border: none;
+      box-shadow: var(--md-elevation-3);
+      padding: 12px 24px;
+      border-radius: 28px;
       display: flex;
       align-items: center;
-      gap: 12px;
-      z-index: 10;
-      grid-column: 1 / -1;
+      gap: 16px;
+      z-index: 100;
+      animation: slideUp 0.3s cubic-bezier(0.0, 0.0, 0.2, 1);
     }
 
     .multi-select-toolbar select {
-      padding: 8px 12px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
+      background: rgba(255,255,255,0.2);
+      color: var(--md-sys-color-on-primary);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
+      padding: 8px 16px;
       font-size: 13px;
       min-width: 200px;
     }
 
     .multi-select-toolbar .btn {
+      background: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+      border: none;
       font-size: 13px;
+    }
+
+    @keyframes slideUp {
+      from { transform: translate(-50%, 100px); opacity: 0; }
+      to { transform: translate(-50%, 0); opacity: 1; }
     }
 
     /* 导入导出区域样式 */
