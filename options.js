@@ -10,6 +10,16 @@ let labelGroups = {}; // { labelId: groupId }
 let selectedLabels = new Set(); // 多选标签的ID集合
 let collapsedGroups = new Set(); // 收起的分组ID集合
 
+// 安全转义文本，防止注入
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // 加载 Client ID
 async function loadClientId() {
   return new Promise((resolve) => {
@@ -102,7 +112,8 @@ async function saveConfig() {
 // 显示消息
 function showMessage(text, type = 'success') {
   const $message = document.getElementById('message');
-  $message.innerHTML = `<div class="message ${type}">${text}</div>`;
+  const safeText = escapeHtml(text);
+  $message.innerHTML = `<div class="message ${type}">${safeText}</div>`;
   setTimeout(() => {
     $message.innerHTML = '';
   }, 3000);
@@ -266,19 +277,21 @@ function renderGroups() {
   // 显示自定义分组
   for (const [groupId, group] of Object.entries(groups)) {
     if (groupId === 'system') continue;
+    const safeGroupId = escapeHtml(groupId);
+    const safeGroupName = escapeHtml(group.name);
 
     html += `
-      <div class="group-card" data-group-id="${groupId}">
+      <div class="group-card" data-group-id="${safeGroupId}">
         <span style="font-size: 13px;">📁</span>
         <input
           type="text"
-          value="${group.name}"
+          value="${safeGroupName}"
           placeholder="Group name"
-          data-group-id="${groupId}"
+          data-group-id="${safeGroupId}"
           class="group-name-input"
         />
-        <button class="btn success save-group-btn" data-group-id="${groupId}">💾 Save</button>
-        <button class="btn danger delete-group-btn" data-group-id="${groupId}">🗑</button>
+        <button class="btn success save-group-btn" data-group-id="${safeGroupId}">💾 Save</button>
+        <button class="btn danger delete-group-btn" data-group-id="${safeGroupId}">🗑</button>
       </div>
     `;
   }
@@ -368,6 +381,9 @@ function createLabelCard(label) {
   const displayName = displayNameMap[label.name] || label.name;
   const isHidden = hidden.has(label.name);
   const isSelected = selectedLabels.has(label.id);
+  const safeDisplayName = escapeHtml(displayName);
+  const safeRealName = escapeHtml(label.name);
+  const safeLabelId = escapeHtml(label.id);
 
   if (isSelected) {
     card.classList.add('selected');
@@ -376,18 +392,18 @@ function createLabelCard(label) {
   card.innerHTML = `
     <input type="checkbox" class="card-select-checkbox" ${isSelected ? 'checked' : ''} title="Select this label">
     <div class="card-hidden-section">
-      <input type="checkbox" class="card-hidden-toggle checkbox" ${isHidden ? 'checked' : ''} title="Hide this label from the panel" id="hidden-${label.id}">
-      <label for="hidden-${label.id}" style="font-size: 11px; color: #6b7280; cursor: pointer; user-select: none;">Hidden</label>
+      <input type="checkbox" class="card-hidden-toggle checkbox" ${isHidden ? 'checked' : ''} title="Hide this label from the panel" id="hidden-${safeLabelId}">
+      <label for="hidden-${safeLabelId}" style="font-size: 11px; color: #6b7280; cursor: pointer; user-select: none;">Hidden</label>
     </div>
     <div class="card-content">
       <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
         <span class="type-badge ${label.type}">${label.type === 'user' ? 'USER' : 'SYSTEM'}</span>
-        <div class="card-real-name" title="${label.name}">${label.name}</div>
+        <div class="card-real-name" title="${safeRealName}">${safeRealName}</div>
       </div>
       <input
         type="text"
         class="card-display-name"
-        value="${displayName}"
+        value="${safeDisplayName}"
         placeholder="Display name"
       />
     </div>
@@ -447,6 +463,7 @@ function createLabelCard(label) {
 function createGroupColumn(groupId, groupName, labels) {
   const column = document.createElement('div');
   column.className = 'group-column';
+  const safeGroupName = escapeHtml(groupName);
 
   const isCollapsed = collapsedGroups.has(groupId);
   if (isCollapsed) {
@@ -458,7 +475,7 @@ function createGroupColumn(groupId, groupName, labels) {
   header.innerHTML = `
     <div style="display: flex; align-items: center; gap: 8px;">
       <span class="group-collapse-toggle">${isCollapsed ? '▶' : '▼'}</span>
-      <span>${groupName}</span>
+      <span>${safeGroupName}</span>
     </div>
     <span class="label-count">${labels.length}</span>
   `;
@@ -606,7 +623,7 @@ function renderMultiSelectToolbar() {
     <span><strong>${selectedLabels.size}</strong> items selected</span>
     <select id="targetGroupSelect">
       <option value="">Select group...</option>
-      ${groupOptions.map(g => `<option value="${g.id}">${g.name}</option>`).join('')}
+      ${groupOptions.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)}</option>`).join('')}
     </select>
     <button class="btn primary" id="sendToGroupBtn">Send to Group</button>
     <button class="btn" id="cancelSelectionBtn">Cancel</button>
@@ -728,7 +745,8 @@ async function loadLabels() {
   const response = await fetchLabels();
 
   if (!response.ok) {
-    $container.innerHTML = `<div class="empty">Load failed: ${response.error}</div>`;
+    const safeError = escapeHtml(response.error || 'Unknown error');
+    $container.innerHTML = `<div class="empty">Load failed: ${safeError}</div>`;
     showMessage('Failed to load labels, check authorization', 'error');
     return;
   }

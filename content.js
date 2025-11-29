@@ -14,6 +14,16 @@ const STATE = {
   labelColorMap: {}   // 标签颜色映射 { labelId: { backgroundColor, textColor } }
 };
 
+// 安全转义文本，防止注入
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // 从存储加载配置
 async function loadConfig() {
   return new Promise((resolve) => {
@@ -56,23 +66,21 @@ async function loadConfig() {
 // 从后台获取标签列表
 async function getLabels() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: 'GET_LABELS' }, (response) => {
+    chrome.runtime.sendMessage({ type: 'GET_LABELS', accountKey: getAccountKey() }, (response) => {
       resolve(response);
     });
   });
 }
 
 // 编码标签为搜索语法
-// Gmail 规则：转小写，空格、斜杠、& 替换为连字符，其他字符保持不变
+// 保留原始标签，必要时使用引号包裹并转义引号
 function encodeLabel(labelName) {
-  // 1. 转小写
-  // 2. 空格、斜杠、& 替换为连字符
-  // 3. 其他特殊字符（如 [], () 等）保持不变
-  const normalized = labelName
-    .toLowerCase()
-    .replace(/[\s\/&]/g, '-');    // 只替换空格、斜杠和 &
-
-  return `label:${normalized}`;
+  const needsQuote = !/^[A-Za-z0-9_-]+$/.test(labelName);
+  const escaped = labelName.replace(/"/g, '\\"');
+  if (needsQuote) {
+    return `label:"${escaped}"`;
+  }
+  return `label:${escaped}`;
 }
 
 // 构建搜索查询
@@ -91,6 +99,11 @@ function buildQuery() {
 function getAccountIndex() {
   const match = location.href.match(/\/u\/(\d+)\//);
   return match ? match[1] : '0';
+}
+
+// 构建账号键，用于隔离 token
+function getAccountKey() {
+  return `u${getAccountIndex()}`;
 }
 
 // 导航到搜索结果
@@ -222,12 +235,13 @@ function renderLabels(container) {
     } else if (STATE.groups[groupId]) {
       groupName = STATE.groups[groupId].name;
     }
+    const safeGroupName = escapeHtml(groupName);
 
     html += `
       <div class="label-group" data-group-id="${groupId}">
         <div class="group-header" data-group-id="${groupId}">
           <span class="group-toggle">${isCollapsed ? '▶' : '▼'}</span>
-          <span class="group-name">${groupName}</span>
+          <span class="group-name">${safeGroupName}</span>
           <span class="group-count">(${sortedLabels.length})</span>
         </div>
         <div class="group-labels" style="${isCollapsed ? 'display: none;' : ''}">
@@ -237,6 +251,8 @@ function renderLabels(container) {
       const displayName = getDisplayName(label.name);
       const isSelected = STATE.selected.has(label.name);
       const colors = getLabelColor(label.id);
+      const safeDisplayName = escapeHtml(displayName);
+      const safeLabelName = escapeHtml(label.name);
 
       const style = isSelected
         ? `background: ${colors.backgroundColor}; color: ${colors.textColor}; border-color: ${colors.backgroundColor};`
@@ -244,9 +260,9 @@ function renderLabels(container) {
 
       html += `
         <div class="label-item ${isSelected ? 'selected' : ''}"
-             data-label="${label.name}"
+             data-label="${safeLabelName}"
              style="${style}">
-          ${displayName}
+          ${safeDisplayName}
         </div>
       `;
     });
@@ -784,9 +800,10 @@ async function initPanel() {
     const response = await getLabels();
 
     if (!response.ok) {
+      const safeError = escapeHtml(response.error || 'Unknown error');
       $errorContainer.innerHTML = `
         <div class="error">
-          Failed to load labels: ${response.error}<br>
+          Failed to load labels: ${safeError}<br>
           Please check authorization in settings.
         </div>
       `;
@@ -805,9 +822,10 @@ async function initPanel() {
     renderPanel();
   } catch (error) {
     console.error('Init panel error:', error);
+    const safeError = escapeHtml(error.message || 'Unknown error');
     $errorContainer.innerHTML = `
       <div class="error">
-        Error: ${error.message}
+        Error: ${safeError}
       </div>
     `;
   }

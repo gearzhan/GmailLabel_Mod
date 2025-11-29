@@ -9,13 +9,14 @@ async function getClientId() {
   });
 }
 
-// 从存储获取访问令牌
-async function getStoredToken() {
+// 从存储获取访问令牌（按账号隔离）
+async function getStoredToken(accountKey = 'u0') {
   return new Promise((resolve) => {
-    chrome.storage.local.get(['accessToken', 'tokenExpiry'], (data) => {
-      // 检查令牌是否过期
-      if (data.accessToken && data.tokenExpiry && Date.now() < data.tokenExpiry) {
-        resolve(data.accessToken);
+    chrome.storage.local.get(['tokens'], (data) => {
+      const tokens = data.tokens || {};
+      const entry = tokens[accountKey];
+      if (entry && entry.accessToken && entry.tokenExpiry && Date.now() < entry.tokenExpiry) {
+        resolve(entry.accessToken);
       } else {
         resolve(null);
       }
@@ -23,25 +24,37 @@ async function getStoredToken() {
   });
 }
 
-// 保存访问令牌
-async function saveToken(token, expiresIn = 3600) {
+// 保存访问令牌（按账号隔离）
+async function saveToken(accountKey, token, expiresIn = 3600) {
   return new Promise((resolve) => {
-    chrome.storage.local.set({
-      accessToken: token,
-      tokenExpiry: Date.now() + expiresIn * 1000
-    }, resolve);
+    chrome.storage.local.get(['tokens'], (data) => {
+      const tokens = data.tokens || {};
+      tokens[accountKey] = {
+        accessToken: token,
+        tokenExpiry: Date.now() + expiresIn * 1000
+      };
+      chrome.storage.local.set({ tokens }, resolve);
+    });
   });
 }
 
-// 清除令牌
-async function clearToken() {
+// 清除令牌（可针对单账号或全部）
+async function clearToken(accountKey) {
   return new Promise((resolve) => {
-    chrome.storage.local.remove(['accessToken', 'tokenExpiry'], resolve);
+    if (accountKey) {
+      chrome.storage.local.get(['tokens'], (data) => {
+        const tokens = data.tokens || {};
+        delete tokens[accountKey];
+        chrome.storage.local.set({ tokens }, resolve);
+      });
+      return;
+    }
+    chrome.storage.local.remove(['tokens'], resolve);
   });
 }
 
 // 启动 OAuth 流程
-async function startOAuthFlow(interactive = true) {
+async function startOAuthFlow(accountKey = 'u0', interactive = true) {
   const clientId = await getClientId();
 
   if (!clientId) {
@@ -50,12 +63,14 @@ async function startOAuthFlow(interactive = true) {
 
   const redirectUrl = chrome.identity.getRedirectURL();
   const scopes = 'https://www.googleapis.com/auth/gmail.readonly';
+  const authUser = (accountKey || 'u0').replace(/^u/, '');
 
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
     `client_id=${encodeURIComponent(clientId)}` +
     `&response_type=token` +
     `&redirect_uri=${encodeURIComponent(redirectUrl)}` +
-    `&scope=${encodeURIComponent(scopes)}`;
+    `&scope=${encodeURIComponent(scopes)}` +
+    `&authuser=${encodeURIComponent(authUser)}`;
 
   try {
     const responseUrl = await chrome.identity.launchWebAuthFlow({
@@ -73,7 +88,7 @@ async function startOAuthFlow(interactive = true) {
     }
 
     // 保存令牌
-    await saveToken(accessToken, expiresIn);
+    await saveToken(accountKey, accessToken, expiresIn);
     return accessToken;
   } catch (error) {
     console.error('OAuth flow error:', error);
@@ -82,23 +97,23 @@ async function startOAuthFlow(interactive = true) {
 }
 
 // 获取访问令牌（自动刷新）
-async function getAuthToken(interactive = true) {
+async function getAuthToken(accountKey = 'u0', interactive = true) {
   // 先尝试从存储获取
-  let token = await getStoredToken();
+  let token = await getStoredToken(accountKey);
 
   if (token) {
     return token;
   }
 
   // 如果没有有效令牌，启动 OAuth 流程
-  token = await startOAuthFlow(interactive);
+  token = await startOAuthFlow(accountKey, interactive);
   return token;
 }
 
 // 获取所有标签
-async function fetchLabels() {
+async function fetchLabels(accountKey = 'u0') {
   try {
-    const token = await getAuthToken();
+    const token = await getAuthToken(accountKey);
     const response = await fetch(
       'https://www.googleapis.com/gmail/v1/users/me/labels',
       {
@@ -112,7 +127,7 @@ async function fetchLabels() {
     if (!response.ok) {
       // 如果是 401 错误，清除令牌并重试
       if (response.status === 401) {
-        await clearToken();
+        await clearToken(accountKey);
         throw new Error('认证已过期，请重新授权');
       }
       throw new Error(`Gmail API error: ${response.status}`);
@@ -145,8 +160,9 @@ async function fetchLabels() {
 // 消息监听器
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'GET_LABELS') {
+    const accountKey = msg.accountKey || 'u0';
     // 异步处理
-    fetchLabels()
+    fetchLabels(accountKey)
       .then(labels => {
         sendResponse({ ok: true, labels });
       })
@@ -157,8 +173,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'REVOKE_AUTH') {
+    const accountKey = msg.accountKey; // 如果未传，清除全部
     // 撤销认证
-    clearToken()
+    clearToken(accountKey)
       .then(() => {
         sendResponse({ ok: true });
       })
@@ -169,8 +186,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'GET_AUTH_STATUS') {
+    const accountKey = msg.accountKey || 'u0';
     // 检查认证状态
-    getStoredToken()
+    getStoredToken(accountKey)
       .then(token => {
         sendResponse({ authenticated: !!token });
       });
