@@ -724,8 +724,8 @@ function renderCardGrid() {
     }
   });
 
-  // 定义列顺序: Ungrouped -> System -> Custom Groups
-  const columnOrder = ['ungrouped', 'system', ...Object.keys(groups)];
+  // 定义列顺序: Ungrouped -> Custom Groups -> System
+  const columnOrder = ['ungrouped', ...Object.keys(groups), 'system'];
 
   // 创建Board容器
   const board = document.createElement('div');
@@ -809,6 +809,36 @@ function reset() {
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
+  // ============================================
+  // SIDEBAR NAVIGATION LOGIC
+  // ============================================
+  const navItems = document.querySelectorAll('.nav-item');
+  const contentSections = document.querySelectorAll('.content-section');
+
+  navItems.forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+
+      // Update active nav item
+      navItems.forEach(nav => nav.classList.remove('active'));
+      item.classList.add('active');
+
+      // Show target section
+      const targetId = item.dataset.target;
+      contentSections.forEach(section => {
+        if (section.id === targetId) {
+          section.classList.add('active');
+        } else {
+          section.classList.remove('active');
+        }
+      });
+    });
+  });
+
+  // ============================================
+  // EXISTING CODE (UNCHANGED)
+  // ============================================
+
   // 加载 Client ID
   loadClientId();
 

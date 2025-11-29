@@ -68,34 +68,228 @@
       padding: 0;
     }
 
+    /* ===== LAYOUT SYSTEM ===== */
+
     body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
       font-family: 'Google Sans', 'Roboto', Arial, sans-serif;
       background: var(--md-sys-color-surface-container-low);
-      padding: 24px;
+      color: var(--md-sys-color-on-surface);
       line-height: 1.6;
+    }
+
+    /* Top App Bar */
+    .app-bar {
+      height: 64px;
+      background: var(--md-sys-color-surface);
+      border-bottom: 1px solid var(--md-sys-color-outline-variant);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      flex-shrink: 0;
+      box-shadow: var(--md-elevation-1);
+      z-index: 50;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-icon { font-size: 24px; }
+
+    .app-title {
+      font-size: 22px;
+      font-weight: 400;
       color: var(--md-sys-color-on-surface);
     }
 
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
-      background: var(--md-sys-color-surface);
-      border-radius: var(--md-sys-shape-corner-medium);
-      box-shadow: var(--md-elevation-1);
-      padding: 32px;
+    .actions-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
 
-    h1 {
-      font-size: 28px;
-      margin-bottom: 8px;
-      color: #111827;
-    }
-
-    .subtitle {
-      color: #6b7280;
+    /* Header Buttons */
+    .header-save-btn {
+      height: 40px;
+      padding: 0 24px;
+      border-radius: var(--md-sys-shape-corner-full);
+      background: var(--md-sys-color-primary);
+      color: var(--md-sys-color-on-primary);
+      border: none;
+      font-weight: 500;
       font-size: 14px;
-      margin-bottom: 32px;
+      cursor: pointer;
+      box-shadow: var(--md-elevation-1);
+      transition: all 0.2s cubic-bezier(0.2, 0.0, 0, 1.0);
     }
+
+    .header-save-btn:hover {
+      box-shadow: var(--md-elevation-2);
+      background: #0842a0;
+    }
+
+    /* Header Action Buttons (Refresh, Reset) */
+    .header-action-btn {
+      height: 40px;
+      padding: 0 20px;
+      border-radius: var(--md-sys-shape-corner-full);
+      background: transparent;
+      border: 1px solid var(--md-sys-color-outline);
+      color: var(--md-sys-color-on-surface);
+      font-weight: 500;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.2, 0.0, 0, 1.0);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .header-action-btn:hover {
+      background: var(--md-sys-color-surface-container-highest);
+      box-shadow: var(--md-elevation-1);
+    }
+
+    .header-action-btn.danger {
+      border-color: var(--md-sys-color-outline);
+    }
+
+    .header-action-btn.danger:hover {
+      background: var(--md-sys-color-error-container);
+      border-color: var(--md-sys-color-error);
+      color: var(--md-sys-color-on-error-container);
+    }
+
+    /* Main Layout */
+    .main-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      background: var(--md-sys-color-surface-container-low);
+      padding: 24px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      border-right: 1px solid var(--md-sys-color-outline-variant);
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      height: 48px;
+      padding: 0 24px;
+      border-radius: var(--md-sys-shape-corner-full);
+      text-decoration: none;
+      color: var(--md-sys-color-on-surface-variant);
+      font-size: 14px;
+      font-weight: 500;
+      transition: background-color 0.2s cubic-bezier(0.2, 0.0, 0, 1.0);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .nav-item:hover {
+      background-color: var(--md-sys-color-surface-container-highest);
+    }
+
+    .nav-item.active {
+      background-color: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+      font-weight: 600;
+    }
+
+    .nav-item .nav-icon {
+      margin-right: 16px;
+      font-size: 20px;
+      width: 24px;
+      text-align: center;
+    }
+
+    /* Content Area */
+    .content-area {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 24px 32px;
+      background: var(--md-sys-color-surface-container-low);
+    }
+
+    #message {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      margin-bottom: 16px;
+    }
+
+    /* Sections */
+    .content-section {
+      display: none;
+      animation: fadeIn 0.3s cubic-bezier(0.2, 0.0, 0, 1.0);
+    }
+
+    .content-section.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Settings Cards */
+    .settings-card {
+      background: var(--md-sys-color-surface);
+      border-radius: var(--md-sys-shape-corner-large);
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: var(--md-elevation-1);
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 500;
+      margin: 0 0 8px 0;
+      color: var(--md-sys-color-on-surface);
+    }
+
+    .card-desc {
+      font-size: 14px;
+      color: var(--md-sys-color-on-surface-variant);
+      margin: 0 0 24px 0;
+      line-height: 1.6;
+    }
+
+    .card-desc a {
+      color: var(--md-sys-color-primary);
+      text-decoration: none;
+    }
+
+    .card-desc a:hover {
+      text-decoration: underline;
+    }
+
 
     .section {
       margin-bottom: 40px;
@@ -669,114 +863,137 @@
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>📧 Gmail Multi-Label Picker</h1>
-    <p class="subtitle">Customize label display, groups, and visibility settings</p>
-
-    <div id="message"></div>
-
-    <!-- Configuration Backup -->
-    <div class="import-export-section">
-      <h3>💾 Configuration Backup</h3>
-      <div class="button-group">
-        <button id="exportBtn" class="btn">
-          📥 Export Configuration
-        </button>
-        <button id="importBtn" class="btn">
-          📤 Import Configuration
-        </button>
-        <input type="file" id="importFile" accept=".json" style="display:none;">
-      </div>
-      <p class="hint">
-        Export your label groups, display names, and settings to a JSON file.
-        Import to restore or share configurations.
-      </p>
+  <!-- Top App Bar -->
+  <header class="app-bar">
+    <div class="logo-area">
+      <span class="logo-icon">📧</span>
+      <span class="app-title">Gmail Multi-Label Picker</span>
     </div>
-
-    <!-- OAuth Configuration & Authorization -->
-    <div class="section">
-      <div class="section-title">⚙️ OAuth Configuration & Authorization</div>
-      <div class="section-desc">
-        Get your OAuth Client ID from Google Cloud Console and enter it below.
-        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color: #3b82f6;">Go to Google Cloud Console →</a>
-      </div>
-      <div style="display: flex; gap: 12px; align-items: center;">
-        <input
-          type="text"
-          id="clientIdInput"
-          class="label-input"
-          placeholder="e.g. 123456789-abcdef.apps.googleusercontent.com"
-          style="flex: 1;"
-        />
-        <button class="btn primary" id="saveClientIdBtn">Save</button>
-      </div>
-      <div style="margin-top: 8px; font-size: 12px; color: #6b7280;">
-        Client ID will be stored locally for OAuth authentication only
-      </div>
-
-      <div id="authStatus" class="auth-status not-authenticated" style="margin-top: 16px;">
-        <span>Checking...</span>
-      </div>
+    <div class="actions-area">
+      <button id="refreshBtn" class="btn header-action-btn">🔃 Refresh</button>
+      <button id="resetBtn" class="btn header-action-btn danger">🔄 Reset</button>
+      <button id="saveBtn" class="btn primary header-save-btn">💾 Save Changes</button>
     </div>
+  </header>
 
-    <!-- Group Management -->
-    <div class="section">
-      <div class="section-title">📁 Group Management</div>
-      <div class="section-desc">
-        Create and manage custom label groups. System labels are automatically placed in the "System" group.
-      </div>
+  <!-- Main Layout -->
+  <div class="main-layout">
 
-      <div id="groupListContainer">
-        <div class="loading">Loading groups...</div>
-      </div>
-    </div>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+      <a class="nav-item" data-target="section-general" href="#">
+        <span class="nav-icon">⚙️</span> General
+      </a>
+      <a class="nav-item active" data-target="section-labels" href="#">
+        <span class="nav-icon">🏷️</span> Labels
+      </a>
+      <a class="nav-item" data-target="section-groups" href="#">
+        <span class="nav-icon">📁</span> Groups
+      </a>
+      <a class="nav-item" data-target="section-backup" href="#">
+        <span class="nav-icon">💾</span> Backup
+      </a>
+    </nav>
 
-    <!-- Label Management -->
-    <div class="section">
-      <div class="section-title">🏷️ Label Management</div>
-      <div class="section-desc">
-        Rename label display names, assign to groups, and hide unwanted labels (doesn't affect real labels in Gmail)
-      </div>
+    <!-- Content Area -->
+    <main class="content-area">
+      <div id="message"></div>
 
-      <div class="stats" id="stats" style="display: none;">
-        <div class="stat-item">
-          Total <strong id="totalLabels">0</strong> labels
+      <!-- Section 1: General -->
+      <section id="section-general" class="content-section">
+        <div class="settings-card">
+          <h2 class="card-title">⚙️ OAuth Configuration</h2>
+          <p class="card-desc">
+            Get your OAuth Client ID from
+            <a href="https://console.cloud.google.com/apis/credentials" target="_blank">
+              Google Cloud Console →
+            </a>
+          </p>
+
+          <div style="display: flex; gap: 12px; margin-bottom: 8px;">
+            <input type="text" id="clientIdInput" class="label-input"
+                   placeholder="e.g. 123456789-abcdef.apps.googleusercontent.com"
+                   style="flex: 1;">
+            <button class="btn primary" id="saveClientIdBtn">Save</button>
+          </div>
+
+          <div style="font-size: 12px; color: #6b7280; margin-bottom: 16px;">
+            Client ID stored locally for OAuth authentication only
+          </div>
+
+          <div id="authStatus" class="auth-status not-authenticated">
+            <span>Checking...</span>
+          </div>
         </div>
-        <div class="stat-item">
-          Renamed <strong id="renamedLabels">0</strong>
+
+        <div class="settings-card">
+          <h2 class="card-title">📖 Usage Guide</h2>
+          <ul style="list-style: none; padding-left: 0; color: #6b7280; font-size: 14px;">
+            <li style="margin-bottom: 8px;">✓ <strong>Multi-Select:</strong> Check labels and use toolbar to batch move</li>
+            <li style="margin-bottom: 8px;">✓ <strong>Drag & Drop:</strong> Drag labels between groups in Labels section</li>
+            <li style="margin-bottom: 8px;">✓ <strong>Rename:</strong> Edit display names (shown in extension only)</li>
+            <li style="margin-bottom: 8px;">✓ <strong>Groups:</strong> Create custom groups in Groups section</li>
+            <li style="margin-bottom: 8px;">✓ <strong>Hide:</strong> Check "Hidden" to remove from Gmail panel</li>
+            <li style="margin-bottom: 8px;">✓ <strong>Save:</strong> Click "Save Changes" in header to persist</li>
+          </ul>
         </div>
-        <div class="stat-item">
-          Hidden <strong id="hiddenLabels">0</strong>
+      </section>
+
+      <!-- Section 2: Labels (DEFAULT ACTIVE) -->
+      <section id="section-labels" class="content-section active">
+        <div class="settings-card">
+          <h2 class="card-title">🏷️ Label Management</h2>
+          <p class="card-desc">
+            Rename labels, assign to groups, and hide unwanted labels
+          </p>
+
+          <div class="stats" id="stats" style="display: none; margin-bottom: 16px;">
+            <div class="stat-item">Total <strong id="totalLabels">0</strong> labels</div>
+            <div class="stat-item">Renamed <strong id="renamedLabels">0</strong></div>
+            <div class="stat-item">Hidden <strong id="hiddenLabels">0</strong></div>
+          </div>
+
+          <div class="search-box">
+            <input type="search" id="searchInput" placeholder="🔍 Filter labels...">
+          </div>
+
+          <div id="labelTableContainer">
+            <div class="loading">Loading labels...</div>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div class="search-box">
-        <input type="search" id="searchInput" placeholder="🔍 Filter labels...">
-      </div>
+      <!-- Section 3: Groups -->
+      <section id="section-groups" class="content-section">
+        <div class="settings-card">
+          <h2 class="card-title">📁 Group Management</h2>
+          <p class="card-desc">
+            Create custom groups to organize your labels
+          </p>
 
-      <div id="labelTableContainer">
-        <div class="loading">Loading labels...</div>
-      </div>
+          <div id="groupListContainer">
+            <div class="loading">Loading groups...</div>
+          </div>
+        </div>
+      </section>
 
-      <div class="actions">
-        <button class="btn primary" id="saveBtn">💾 Save Settings</button>
-        <button class="btn" id="resetBtn">🔄 Reset All</button>
-        <button class="btn" id="refreshBtn">🔃 Refresh Labels</button>
-      </div>
-    </div>
+      <!-- Section 4: Backup -->
+      <section id="section-backup" class="content-section">
+        <div class="settings-card">
+          <h2 class="card-title">💾 Configuration Backup</h2>
+          <p class="card-desc">
+            Export settings to JSON or restore from file
+          </p>
 
-    <!-- Usage Guide -->
-    <div class="section">
-      <div class="section-title">📖 Usage Guide</div>
-      <ul style="list-style: none; padding-left: 0; color: #6b7280; font-size: 14px;">
-        <li style="margin-bottom: 8px;">✓ <strong>Multi-Select & Send:</strong> Check labels and use toolbar to send them to a group</li>
-        <li style="margin-bottom: 8px;">✓ <strong>Collapse Groups:</strong> Click group headers to collapse/expand label lists</li>
-        <li style="margin-bottom: 8px;">✓ <strong>Rename:</strong> Edit the display name in each card (shown in extension only)</li>
-        <li style="margin-bottom: 8px;">✓ <strong>Create Groups:</strong> Use the form at top of Group Management section</li>
-        <li style="margin-bottom: 8px;">✓ <strong>Hide Labels:</strong> Check "Hidden" checkbox in top-right of each card</li>
-        <li style="margin-bottom: 8px;">✓ <strong>Save Changes:</strong> Click "Save Settings" button to persist your changes</li>
-      </ul>
-    </div>
+          <div class="button-group">
+            <button id="exportBtn" class="btn">📥 Export Configuration</button>
+            <button id="importBtn" class="btn">📤 Import Configuration</button>
+            <input type="file" id="importFile" accept=".json" style="display:none;">
+          </div>
+        </div>
+      </section>
+
+    </main>
   </div>
 
   <script src="options.js"></script>
