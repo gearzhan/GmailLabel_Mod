@@ -73,14 +73,14 @@ async function getLabels() {
 }
 
 // 编码标签为搜索语法
-// 保留原始标签，必要时使用引号包裹并转义引号
+// Gmail UI 习惯：小写并将空格、斜杠、& 转为短横线
 function encodeLabel(labelName) {
-  const needsQuote = !/^[A-Za-z0-9_-]+$/.test(labelName);
-  const escaped = labelName.replace(/"/g, '\\"');
-  if (needsQuote) {
-    return `label:"${escaped}"`;
-  }
-  return `label:${escaped}`;
+  const normalized = labelName
+    .toLowerCase()
+    .replace(/[\s/&]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return `label:${normalized}`;
 }
 
 // 构建搜索查询
