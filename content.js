@@ -254,9 +254,10 @@ function renderLabels(container) {
       const safeDisplayName = escapeHtml(displayName);
       const safeLabelName = escapeHtml(label.name);
 
+      // 使用MD3基础样式，label颜色作为左边框装饰
       const style = isSelected
-        ? `background: ${colors.backgroundColor}; color: ${colors.textColor}; border-color: ${colors.backgroundColor};`
-        : `background: ${colors.backgroundColor}33; color: #374151; border: 1px solid ${colors.backgroundColor}66;`;
+        ? `border-left: 3px solid ${colors.backgroundColor};`
+        : `border-left: 3px solid ${colors.backgroundColor}; opacity: 0.7;`;
 
       html += `
         <div class="label-item ${isSelected ? 'selected' : ''}"
@@ -315,15 +316,41 @@ function renderPanel() {
   if (!shadow) return;
 
   const $labelList = shadow.getElementById('labelList');
+  const $chipsContainer = shadow.getElementById('chipsContainer');
   const $modeBtn = shadow.getElementById('modeBtn');
 
-  if ($labelList) {
-    renderLabels($labelList);
+  // 渲染chips（选中的标签）
+  if ($chipsContainer) {
+    $chipsContainer.innerHTML = '';
+
+    if (STATE.selected.size > 0) {
+      STATE.selected.forEach(labelName => {
+        const displayName = getDisplayName(labelName);
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.innerHTML = `
+          <span>${escapeHtml(displayName)}</span>
+          <span class="chip-remove" data-label="${escapeHtml(labelName)}">×</span>
+        `;
+
+        // 绑定移除事件
+        chip.querySelector('.chip-remove').addEventListener('click', (e) => {
+          e.stopPropagation();
+          STATE.selected.delete(labelName);
+          renderPanel();
+        });
+
+        $chipsContainer.appendChild(chip);
+      });
+      $chipsContainer.style.display = 'flex';
+    } else {
+      $chipsContainer.style.display = 'none';
+    }
   }
 
-  if ($modeBtn) {
-    $modeBtn.textContent = STATE.mode;
-    $modeBtn.className = STATE.mode === 'OR' ? 'btn mode-or' : 'btn';
+  // 渲染标签列表
+  if ($labelList) {
+    renderLabels($labelList);
   }
 }
 
@@ -340,9 +367,9 @@ function injectPanel() {
     position: fixed;
     bottom: ${STATE.panelPosition.y}px;
     left: ${STATE.panelPosition.x}px;
-    width: ${STATE.panelCollapsed ? '52px' : '300px'};
+    width: ${STATE.panelCollapsed ? '56px' : '320px'};
     z-index: 9999;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Google Sans', 'Roboto', Arial, sans-serif;
   `;
 
   // 使用 Shadow DOM 隔离样式
@@ -352,37 +379,175 @@ function injectPanel() {
   const wrapper = document.createElement('div');
   wrapper.innerHTML = `
     <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
+      /* Material Design 3 Design Tokens - Gmail themed */
+      :host {
+        /* Primary Colors */
+        --md-sys-color-primary: #0b57d0;
+        --md-sys-color-on-primary: #ffffff;
+        --md-sys-color-primary-container: #d3e3fd;
+        --md-sys-color-on-primary-container: #041e49;
+
+        /* Secondary Colors */
+        --md-sys-color-secondary: #5a5d72;
+        --md-sys-color-on-secondary: #ffffff;
+        --md-sys-color-secondary-container: #e8def8;
+        --md-sys-color-on-secondary-container: #1d192b;
+
+        /* Surface Colors */
+        --md-sys-color-surface: #fdfcff;
+        --md-sys-color-surface-dim: #dfe2eb;
+        --md-sys-color-surface-bright: #fdfcff;
+        --md-sys-color-surface-container-lowest: #ffffff;
+        --md-sys-color-surface-container-low: #f7f9ff;
+        --md-sys-color-surface-container: #f0f4f9;
+        --md-sys-color-surface-container-high: #e8ebed;
+        --md-sys-color-surface-container-highest: #e3e5e8;
+        --md-sys-color-on-surface: #1a1c1e;
+        --md-sys-color-on-surface-variant: #44474e;
+
+        /* Outline */
+        --md-sys-color-outline: #747775;
+        --md-sys-color-outline-variant: #c4c6c4;
+
+        /* Error Colors */
+        --md-sys-color-error: #ba1a1a;
+        --md-sys-color-on-error: #ffffff;
+        --md-sys-color-error-container: #ffdad6;
+        --md-sys-color-on-error-container: #410002;
+
+        /* Elevation Shadows - MD3 Standard */
+        --md-elevation-1:
+          0px 1px 2px 0px rgba(0, 0, 0, 0.3),
+          0px 1px 3px 1px rgba(0, 0, 0, 0.15);
+        --md-elevation-2:
+          0px 1px 2px 0px rgba(0, 0, 0, 0.3),
+          0px 2px 6px 2px rgba(0, 0, 0, 0.15);
+        --md-elevation-3:
+          0px 4px 8px 3px rgba(0, 0, 0, 0.15),
+          0px 1px 3px rgba(0, 0, 0, 0.3);
+
+        /* Shape Tokens */
+        --md-sys-shape-corner-none: 0px;
+        --md-sys-shape-corner-extra-small: 4px;
+        --md-sys-shape-corner-small: 8px;
+        --md-sys-shape-corner-medium: 12px;
+        --md-sys-shape-corner-large: 16px;
+        --md-sys-shape-corner-extra-large: 28px;
+        --md-sys-shape-corner-full: 9999px;
+      }
+
+      * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Google Sans', 'Roboto', Arial, sans-serif; }
       .card {
-        background: #ffffff;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        background: var(--md-sys-color-surface);
+        border: none;
+        border-radius: var(--md-sys-shape-corner-medium);
+        box-shadow: var(--md-elevation-3);
+        width: 320px;
         font-size: 13px;
         line-height: 1.5;
         position: relative;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        margin-bottom: 70px;
+        transition: opacity 0.2s ease, transform 0.2s ease;
       }
       .panel-content {
         padding: 12px;
       }
+      /* Chips Container - MD3 Input Chips */
+      .chips-container {
+        padding: 0 12px 12px 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        max-height: 120px;
+        overflow-y: auto;
+        border-bottom: 1px solid var(--md-sys-color-outline-variant);
+        margin-bottom: 8px;
+      }
+      .chip {
+        background: var(--md-sys-color-secondary-container);
+        color: var(--md-sys-color-on-secondary-container);
+        border-radius: var(--md-sys-shape-corner-small);
+        padding: 6px 4px 6px 12px;
+        font-size: 14px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        animation: chipFadeIn 0.2s ease;
+        user-select: none;
+      }
+      .chip-remove {
+        cursor: pointer;
+        font-size: 18px;
+        font-weight: 400;
+        opacity: 0.6;
+        padding: 0 6px;
+        margin: -2px -2px -2px 2px;
+        border-radius: var(--md-sys-shape-corner-extra-small);
+        transition: all 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .chip-remove:hover {
+        opacity: 1;
+        background: rgba(0, 0, 0, 0.1);
+      }
+      @keyframes chipFadeIn {
+        from { opacity: 0; transform: scale(0.8); }
+        to { opacity: 1; transform: scale(1); }
+      }
       .controls {
         display: flex;
-        gap: 6px;
+        gap: 8px;
         margin-bottom: 10px;
         flex-wrap: wrap;
       }
       .filter-input {
         flex: 1;
         min-width: 140px;
-        padding: 6px 10px;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        font-size: 12px;
+        padding: 8px 12px;
+        border: 1px solid var(--md-sys-color-outline-variant);
+        border-radius: 24px;
+        font-size: 13px;
         outline: none;
+        background: var(--md-sys-color-surface-container);
+        color: var(--md-sys-color-on-surface);
       }
       .filter-input:focus {
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+        border-color: var(--md-sys-color-primary);
+        background: var(--md-sys-color-surface);
+      }
+      /* Segmented Button Control - MD3 */
+      .mode-switch {
+        display: flex;
+        background: var(--md-sys-color-surface-container-high);
+        border-radius: 20px;
+        padding: 3px;
+        gap: 2px;
+      }
+      .mode-option {
+        padding: 6px 16px;
+        border-radius: 16px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        color: var(--md-sys-color-on-surface-variant);
+        transition: all 0.2s;
+        white-space: nowrap;
+      }
+      .mode-option.active {
+        background: var(--md-sys-color-secondary-container);
+        color: var(--md-sys-color-on-secondary-container);
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+      }
+      .mode-option:hover:not(.active) {
+        background: rgba(0, 0, 0, 0.05);
       }
       .btn {
         padding: 6px 12px;
@@ -471,19 +636,30 @@ function injectPanel() {
         padding-left: 12px;
       }
       .label-item {
-        padding: 1px 5px;
+        padding: 6px 16px;
+        margin: 3px 0;
         cursor: pointer;
         user-select: none;
         transition: all 0.15s;
-        font-size: 12px;
-        border-radius: 3px;
+        font-size: 13px;
+        font-weight: 400;
+        border-radius: 20px;
         white-space: nowrap;
+        border: 1px solid transparent;
+        color: var(--md-sys-color-on-surface);
+        background: var(--md-sys-color-surface-container);
       }
       .label-item:hover {
-        filter: brightness(0.95);
+        background: var(--md-sys-color-surface-container-high);
+      }
+      .label-item.selected {
+        background: var(--md-sys-color-primary-container);
+        color: var(--md-sys-color-on-primary-container);
+        border-color: var(--md-sys-color-outline);
+        font-weight: 500;
       }
       .label-item.selected:hover {
-        filter: brightness(0.9);
+        filter: brightness(0.95);
       }
       .action-bar {
         margin-top: 10px;
@@ -517,50 +693,34 @@ function injectPanel() {
       }
       .collapse-toggle {
         position: fixed;
-        width: 36px;
-        height: 36px;
+        width: 56px;
+        height: 56px;
         border-radius: 50%;
-        background: #1a73e8;
-        color: white;
+        background: var(--md-sys-color-primary-container);
+        color: var(--md-sys-color-on-primary-container);
         border: none;
         cursor: pointer;
-        font-size: 20px;
+        font-size: 24px;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.1);
+        transition: all 0.2s cubic-bezier(0.2, 0.0, 0, 1.0);
+        box-shadow: var(--md-elevation-3);
         z-index: 10;
         padding: 0;
       }
       .collapse-toggle:hover {
-        background: #1765cc;
-        transform: scale(1.1);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.25), 0 6px 12px rgba(0,0,0,0.15);
+        background: var(--md-sys-color-primary-container);
+        transform: scale(1.05);
+        box-shadow: var(--md-elevation-3);
+        filter: brightness(0.95);
       }
       .collapse-toggle:active {
-        transform: scale(1.05);
-      }
-      .collapse-icon {
-        transform: scale(1.45);
-        transform-origin: center center;
-        transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-        display: inline-block;
-        line-height: 1;
-      }
-      .panel-collapsed .collapse-icon {
-        transform: scale(1.45) rotate(360deg);
-      }
-      @keyframes gear-pulse {
-        0%, 100% { transform: scale(1.45); }
-        50% { transform: scale(1.65); }
-      }
-      .collapse-icon.animating {
-        animation: gear-pulse 0.3s ease-in-out;
+        transform: scale(1.0);
       }
       .panel-collapsed {
-        width: 36px;
-        height: 36px;
+        width: 56px;
+        height: 56px;
         background: transparent;
         border: none;
         box-shadow: none;
@@ -586,8 +746,12 @@ function injectPanel() {
             id="filterInput"
             placeholder="🔍 Filter labels..."
           />
-          <button class="btn" id="modeBtn">${STATE.mode}</button>
+          <div class="mode-switch" id="modeSwitch">
+            <button class="mode-option ${STATE.mode === 'AND' ? 'active' : ''}" data-val="AND">ALL</button>
+            <button class="mode-option ${STATE.mode === 'OR' ? 'active' : ''}" data-val="OR">ANY</button>
+          </div>
         </div>
+        <div class="chips-container" id="chipsContainer" style="display: none;"></div>
         <div class="label-list" id="labelList">
           <div class="loading">Loading labels...</div>
         </div>
@@ -597,7 +761,9 @@ function injectPanel() {
         </div>
       </div>
       <button class="collapse-toggle" id="collapseBtn" title="${STATE.panelCollapsed ? 'Expand panel' : 'Collapse panel'}">
-        <span class="collapse-icon">⚙</span>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/>
+        </svg>
       </button>
     </div>
   `;
@@ -607,7 +773,7 @@ function injectPanel() {
 
   // 绑定事件
   const $filterInput = shadow.getElementById('filterInput');
-  const $modeBtn = shadow.getElementById('modeBtn');
+  const $modeSwitch = shadow.getElementById('modeSwitch');
   const $clearBtn = shadow.getElementById('clearBtn');
   const $searchBtn = shadow.getElementById('searchBtn');
   const $collapseBtn = shadow.getElementById('collapseBtn');
@@ -617,9 +783,14 @@ function injectPanel() {
     renderPanel();
   });
 
-  $modeBtn.addEventListener('click', () => {
-    STATE.mode = STATE.mode === 'AND' ? 'OR' : 'AND';
-    renderPanel();
+  // 绑定分段按钮事件
+  $modeSwitch.querySelectorAll('.mode-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      STATE.mode = btn.dataset.val;
+      // 更新active状态
+      $modeSwitch.querySelectorAll('.mode-option').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
   });
 
   $clearBtn.addEventListener('click', () => {
@@ -635,20 +806,15 @@ function injectPanel() {
   $collapseBtn.addEventListener('click', () => {
     STATE.panelCollapsed = !STATE.panelCollapsed;
     const $panel = shadow.getElementById('panel');
-    const $icon = shadow.querySelector('.collapse-icon');
-
-    // 添加脉冲动画
-    $icon.classList.add('animating');
-    setTimeout(() => $icon.classList.remove('animating'), 300);
 
     if (STATE.panelCollapsed) {
       $panel.classList.add('panel-collapsed');
       $collapseBtn.title = 'Expand panel';
-      host.style.width = '52px';  // 收起时缩小host宽度
+      host.style.width = '56px';  // 收起时缩小host宽度
     } else {
       $panel.classList.remove('panel-collapsed');
       $collapseBtn.title = 'Collapse panel';
-      host.style.width = '300px';  // 展开时恢复host宽度
+      host.style.width = '320px';  // 展开时恢复host宽度
     }
     // 保存面板收起状态
     chrome.storage.sync.set({ panelCollapsed: STATE.panelCollapsed });
