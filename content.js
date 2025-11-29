@@ -29,7 +29,15 @@ async function loadConfig() {
       'labelColorMap'
     ], (data) => {
       STATE.displayNameMap = data.displayNameMap || {};
-      STATE.order = data.order || {};  // 加载为对象
+
+      // 数据迁移：将旧的数组格式转换为对象格式
+      if (Array.isArray(data.order)) {
+        console.warn('[Panel Order] Migrating old array format to object format');
+        STATE.order = {};  // 重置为空对象
+      } else {
+        STATE.order = data.order || {};  // 加载为对象
+      }
+
       STATE.hidden = new Set(data.hidden || []);
       STATE.groups = data.groups || {};
       STATE.labelGroups = data.labelGroups || {};
@@ -146,6 +154,7 @@ function getLabelColor(labelId) {
 // 辅助函数 - 根据排序获取标签
 function getSortedLabelsForGroup(labels, groupId) {
   if (!STATE.order || !STATE.order[groupId] || STATE.order[groupId].length === 0) {
+    console.log(`[Panel Order] No saved order for ${groupId}, using alphabetical`);
     // 无排序数据，按字母顺序
     return labels.sort((a, b) => {
       const nameA = getDisplayName(a.name).toLowerCase();
@@ -153,6 +162,8 @@ function getSortedLabelsForGroup(labels, groupId) {
       return nameA.localeCompare(nameB);
     });
   }
+
+  console.log(`[Panel Order] Applying saved order for ${groupId}:`, STATE.order[groupId]);
 
   const orderMap = {};
   STATE.order[groupId].forEach((labelId, index) => {
@@ -313,7 +324,7 @@ function injectPanel() {
     position: fixed;
     bottom: ${STATE.panelPosition.y}px;
     left: ${STATE.panelPosition.x}px;
-    width: ${STATE.panelCollapsed ? '60px' : '300px'};
+    width: ${STATE.panelCollapsed ? '52px' : '300px'};
     z-index: 9999;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   `;
@@ -489,11 +500,9 @@ function injectPanel() {
         margin-bottom: 10px;
       }
       .collapse-toggle {
-        position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 44px;
-        height: 44px;
+        position: fixed;
+        width: 36px;
+        height: 36px;
         border-radius: 50%;
         background: #1a73e8;
         color: white;
@@ -506,6 +515,7 @@ function injectPanel() {
         transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
         box-shadow: 0 2px 4px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.1);
         z-index: 10;
+        padding: 0;
       }
       .collapse-toggle:hover {
         background: #1765cc;
@@ -517,14 +527,24 @@ function injectPanel() {
       }
       .collapse-icon {
         transform: scale(1.45);
+        transform-origin: center center;
         transition: transform 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        display: inline-block;
+        line-height: 1;
       }
       .panel-collapsed .collapse-icon {
-        transform: scale(1.45) rotate(180deg);
+        transform: scale(1.45) rotate(360deg);
+      }
+      @keyframes gear-pulse {
+        0%, 100% { transform: scale(1.45); }
+        50% { transform: scale(1.65); }
+      }
+      .collapse-icon.animating {
+        animation: gear-pulse 0.3s ease-in-out;
       }
       .panel-collapsed {
-        width: 44px;
-        height: 44px;
+        width: 36px;
+        height: 36px;
         background: transparent;
         border: none;
         box-shadow: none;
@@ -599,10 +619,16 @@ function injectPanel() {
   $collapseBtn.addEventListener('click', () => {
     STATE.panelCollapsed = !STATE.panelCollapsed;
     const $panel = shadow.getElementById('panel');
+    const $icon = shadow.querySelector('.collapse-icon');
+
+    // 添加脉冲动画
+    $icon.classList.add('animating');
+    setTimeout(() => $icon.classList.remove('animating'), 300);
+
     if (STATE.panelCollapsed) {
       $panel.classList.add('panel-collapsed');
       $collapseBtn.title = 'Expand panel';
-      host.style.width = '60px';  // 收起时缩小host宽度
+      host.style.width = '52px';  // 收起时缩小host宽度
     } else {
       $panel.classList.remove('panel-collapsed');
       $collapseBtn.title = 'Collapse panel';
@@ -610,7 +636,24 @@ function injectPanel() {
     }
     // 保存面板收起状态
     chrome.storage.sync.set({ panelCollapsed: STATE.panelCollapsed });
+    updateTogglePosition();  // 确保位置正确
   });
+
+  // 更新 toggle 按钮的固定位置
+  function updateTogglePosition() {
+    const shadow = document.getElementById('mlp-root')?.shadowRoot;
+    if (!shadow) return;
+
+    const $collapseBtn = shadow.getElementById('collapseBtn');
+    if (!$collapseBtn) return;
+
+    // 固定在屏幕的 panelPosition 位置（左下角）
+    $collapseBtn.style.left = `${STATE.panelPosition.x}px`;
+    $collapseBtn.style.bottom = `${STATE.panelPosition.y}px`;
+  }
+
+  // 初始设置 toggle 位置
+  updateTogglePosition();
 
   // 拖拽相关变量
   let isDragging = false;
@@ -710,6 +753,7 @@ function injectPanel() {
     // 保存位置
     STATE.panelPosition = { x: finalX, y: finalY };
     chrome.storage.sync.set({ panelPosition: STATE.panelPosition });
+    updateTogglePosition();  // 更新 toggle 位置
   }
 
   // 窗口大小变化时重新吸附
@@ -717,6 +761,7 @@ function injectPanel() {
     if (STATE.panelCollapsed) {
       snapToEdge(host);
     }
+    updateTogglePosition();  // 更新 toggle 位置
   });
 
   // 加载数据

@@ -62,7 +62,17 @@ async function loadConfig() {
       'collapsedGroups'
     ], (data) => {
       displayNameMap = data.displayNameMap || {};
-      order = data.order || {};  // 加载为对象
+
+      // 数据迁移：将旧的数组格式转换为对象格式
+      if (Array.isArray(data.order)) {
+        console.warn('[Order] Migrating old array format to object format');
+        order = {};  // 重置为空对象
+        // 立即保存以清除旧数据
+        chrome.storage.sync.set({ order: {} });
+      } else {
+        order = data.order || {};  // 加载为对象
+      }
+
       hidden = new Set(data.hidden || []);
       groups = data.groups || {};
       labelGroups = data.labelGroups || {};
@@ -485,14 +495,20 @@ function createGroupColumn(groupId, groupName, labels) {
   });
 
   // 放置事件
-  dropZone.addEventListener('drop', async (e) => {  // 添加async
+  dropZone.addEventListener('drop', async (e) => {
     e.preventDefault();
     const labelId = e.dataTransfer.getData('text/plain');
 
-    // 更新排序
-    updateLabelOrder(groupId, dropZone);
-    await saveConfig();  // 添加await，等待保存完成
-    showMessage('Label order updated', 'success');
+    // 等待 DOM 更新完成再读取顺序
+    requestAnimationFrame(() => {
+      requestAnimationFrame(async () => {
+        // 现在 DOM 已确保更新完成
+        updateLabelOrder(groupId, dropZone);
+        await saveConfig();
+        console.log(`[Order] Saved for ${groupId}:`, order[groupId]);
+        showMessage('Label order updated', 'success');
+      });
+    });
   });
 
   // 按排序渲染labels（如果有排序数据）
@@ -531,27 +547,45 @@ function getDragAfterElement(container, y) {
 // 辅助函数 - 根据排序获取标签
 function getSortedLabels(labels, groupId) {
   if (!order[groupId] || order[groupId].length === 0) {
+    console.log(`[Order] No saved order for ${groupId}, using alphabetical`);
     // 无排序数据，按字母顺序
     return labels.sort((a, b) => a.name.localeCompare(b.name));
   }
+
+  console.log(`[Order] Applying saved order for ${groupId}:`, order[groupId]);
 
   const orderMap = {};
   order[groupId].forEach((labelId, index) => {
     orderMap[labelId] = index;
   });
 
-  return labels.sort((a, b) => {
+  const sorted = labels.sort((a, b) => {
     const orderA = orderMap[a.id] !== undefined ? orderMap[a.id] : 999999;
     const orderB = orderMap[b.id] !== undefined ? orderMap[b.id] : 999999;
     if (orderA !== orderB) return orderA - orderB;
     return a.name.localeCompare(b.name);  // 相同顺序时按名称排序
   });
+
+  console.log(`[Order] Sorted ${labels.length} labels for ${groupId}`);
+  return sorted;
 }
 
 // 辅助函数 - 更新标签排序
 function updateLabelOrder(groupId, dropZone) {
   const cards = dropZone.querySelectorAll('.label-card');
   const newOrder = Array.from(cards).map(card => card.dataset.labelId);
+
+  console.log(`[Order] Updating ${groupId}: ${newOrder.length} labels`);
+  console.log('[Order] New order:', newOrder);
+
+  // 验证：确保获得了有效的 label ID
+  if (newOrder.length === 0) {
+    console.warn(`[Order] Warning: No labels found in ${groupId}`);
+  }
+  if (newOrder.some(id => !id)) {
+    console.error('[Order] Error: Some label IDs are undefined!');
+  }
+
   order[groupId] = newOrder;
 }
 
@@ -700,7 +734,11 @@ async function loadLabels() {
   }
 
   allLabels = response.labels || [];
+
+  // 关键：等待配置加载完成后再渲染
   await loadConfig();
+  console.log('[Order] Loaded order config:', order);
+
   renderGroups();
   renderCardGrid();
   updateAuthStatus();
