@@ -19,7 +19,9 @@ A Chrome Extension (Manifest V3) that adds a **Material Design 3** multi-label p
 **Service Worker (`sw.js`)**
 - OAuth 2.0 authentication using `chrome.identity` API
 - Gmail REST API integration for fetching labels
-- Token management with expiration detection
+- Token management with expiration detection and auto-recovery on 401 errors
+- Label color extraction (backgroundColor, textColor) from Gmail API
+- Per-account token storage with expiry timestamps
 - Message types:
   - `GET_LABELS`: Fetch all Gmail labels for an account
   - `REVOKE_AUTH`: Revoke authentication and clear stored tokens
@@ -31,12 +33,14 @@ A Chrome Extension (Manifest V3) that adds a **Material Design 3** multi-label p
 - **FAB (Floating Action Button)**: 56px circular button with filter icon
 - **Panel**: 320px width with MD3 elevation and rounded corners
 - **Chips Container**: Dismissible chips for selected labels
-- **Segmented Control**: ALL/ANY toggle using MD3 segmented buttons
-- **Label List**: Pill-shaped items with color accents and grouping
+- **Segmented Control**: ALL/ANY toggle with animated sliding pill (cubic-bezier easing)
+- **Label List**: Pill-shaped items with Gmail color visualization and grouping
 - Multi-label selection with visual feedback
 - AND/OR search mode toggling
 - Gmail search query builder using `label:` syntax
-- Draggable panel positioning (when collapsed)
+- **Draggable Panel Positioning**: When collapsed, FAB becomes draggable with edge-snapping (12px margins)
+- **Nested Label Support**: Labels with "/" display with indentation and visual hierarchy
+- **Label Color Sync**: Displays Gmail label colors as left border accents (fallback: gray #9ca3af)
 
 **State Management (content.js)**
 ```javascript
@@ -57,13 +61,14 @@ STATE = {
 **Options Page (`options.html/js`)** - Kanban Board Layout
 - **Horizontal Kanban board** with drag-and-drop between columns
 - Column order: Ungrouped → System → Custom Groups
+- **Sidebar Navigation**: Tab-based sections (General, Labels, Groups, Backup) with fade-in transitions
 - OAuth Client ID configuration
 - Label renaming (display name only, doesn't modify Gmail)
 - Custom group management with create/rename/delete
 - Label hiding (hidden labels don't appear in panel)
-- Multi-select with floating toolbar
-- Real-time search and filtering
-- Configuration import/export (JSON format)
+- **Multi-select Toolbar**: Floating toolbar appears when 1+ labels selected, enables bulk group assignment
+- Real-time search and filtering across all columns
+- **Configuration Import/Export**: JSON format with data validation (checks group reference integrity)
 
 **Popup (`popup.html/js`)**
 - Quick shortcuts to Gmail and settings page
@@ -114,11 +119,14 @@ STATE = {
 }
 ```
 
-**`chrome.storage.local`** (local only, for temporary data)
+**`chrome.storage.local`** (local only, per-account tokens)
 ```javascript
 {
-  accessToken: string,     // Gmail API access token (per account)
-  tokenExpiry: number      // Token expiration timestamp
+  tokens: {
+    u0: { accessToken: string, tokenExpiry: number },  // Account /u/0/
+    u1: { accessToken: string, tokenExpiry: number },  // Account /u/1/
+    // ... additional accounts as needed
+  }
 }
 ```
 
@@ -177,29 +185,37 @@ Extracts account index from Gmail URL (`/u/0/`, `/u/1/`, etc.)
 - [ ] Click FAB expands panel (320px width)
 - [ ] Select labels → chips appear at top
 - [ ] Click × on chip → removes selection
-- [ ] ALL/ANY toggle switches modes visually
+- [ ] ALL/ANY toggle switches modes with sliding pill animation
 - [ ] Filter input filters labels in real-time
 - [ ] Search button navigates to Gmail search
+- [ ] Drag collapsed FAB → snaps to edges with 12px margin
+- [ ] Nested labels (containing "/") display with indentation
+- [ ] Label colors from Gmail API display as left border accents
 - [ ] Panel remembers position after drag (when collapsed)
 - [ ] Works across multiple Gmail accounts (`/u/0/`, `/u/1/`)
 
 **Options Page (Kanban Board)**
 - [ ] Horizontal scrolling board layout
 - [ ] Three default columns: Ungrouped, System, Custom Groups
+- [ ] Sidebar navigation switches between sections (General, Labels, Groups, Backup)
+- [ ] Section transitions show fade-in animation (250ms)
 - [ ] Drag labels between columns → updates group assignment
-- [ ] Drag within column → updates sort order
-- [ ] Multi-select → floating toolbar appears at bottom
-- [ ] Toolbar "Send to Group" moves selected labels
+- [ ] Drag within column → updates sort order correctly
+- [ ] Multi-select → floating toolbar appears at bottom when 1+ labels checked
+- [ ] Toolbar "Send to Group" moves selected labels in bulk
+- [ ] Group headers collapse/expand columns on click
 - [ ] Create custom group → new column appears
-- [ ] Search filters labels across all columns
-- [ ] Import/Export configuration works
+- [ ] Search filters labels across all columns in real-time
+- [ ] Import/Export configuration works with JSON format
+- [ ] Import validates group references and removes invalid ones
 
 **Edge Cases**
 - [ ] Empty groups are hidden
 - [ ] Hidden labels don't appear in panel
 - [ ] Collapsed groups persist across sessions
-- [ ] Token expiration triggers re-auth
+- [ ] Token expiration triggers 401 error → auto-clears token → prompts re-auth
 - [ ] Panel works after Gmail SPA navigation
+- [ ] Data migration from old format works automatically on load
 
 ### Key Implementation Details
 
@@ -235,6 +251,145 @@ Extracts account index from Gmail URL (`/u/0/`, `/u/1/`, etc.)
 - Each chip has remove button (×)
 - Fade-in animation on creation
 - Container auto-hides when empty
+
+**Data Migration Logic** (`content.js:43-49`, `options.js:76-84`)
+- Detects old array-based `order` format: `[labelId1, labelId2, ...]`
+- Migrates to object format: `{ groupId: [labelId, ...] }`
+- Logs console warning for debugging
+- Automatic migration on config load
+- Clears old format immediately after migration
+
+**Drag-and-Drop with Snapping** (`content.js:825-967`)
+- Collapsed FAB becomes draggable on mousedown
+- **Intelligent drag detection**: Requires 300ms OR 5px movement to prevent accidental drags
+- Edge-snapping algorithm:
+  - Left edge: `Math.max(12, Math.min(x, window.innerWidth - 44))`
+  - Bottom edge: `Math.max(12, Math.min(y, window.innerHeight - 44))`
+  - 12px safety margin from window boundaries
+- Smooth animation using `cubic-bezier(0.2, 0.0, 0, 1.0)` easing
+- Position saved to `chrome.storage.sync` on drag end
+- Mouse listeners attached to document for full-window tracking
+
+**Label Color Extraction** (`sw.js:139-151`)
+- Extracts `backgroundColor` and `textColor` from Gmail API `/users/me/labels` response
+- Stores in `chrome.storage.sync.labelColorMap` with label ID as key
+- Content script applies colors as left border on label items (`content.js:151-165`)
+- Fallback to gray (#9ca3af) if color not available
+- Colors persist across sessions and sync across devices
+
+**Nested Label Rendering** (`content.js:257-263`)
+- Detects nested labels via `label.name.includes('/')`
+- Applies `.nested-label` CSS class
+- Visual styling: 16px left padding, 2px left border, lighter background
+- Preserves hierarchy without modifying Gmail label structure
+- Works with Gmail's native nested label naming convention
+
+**Multi-Select Toolbar** (`options.js:626-689`)
+- Dynamically rendered when `selectedLabels.size > 0`
+- Fixed position at bottom of viewport
+- Shows count of selected labels
+- "Send to Group" dropdown populated with all available groups
+- "Cancel" button clears selection
+- Bulk operations update `labelGroups` mapping for all selected labels
+- Re-renders board after bulk assignment
+
+**Configuration Import Validation** (`options.js:170-179`)
+- Validates all `labelGroups` references point to valid group IDs
+- Checks `labelGroups[labelId]` exists in `groups` object
+- Silently removes invalid group references (sets to undefined)
+- Console logs validation errors for debugging
+- Ensures data consistency after import from potentially corrupted JSON
+
+**requestAnimationFrame Pattern** (`options.js:535-545`)
+- Double `requestAnimationFrame` after drag-and-drop
+- First RAF: DOM updates complete
+- Second RAF: Read updated order from DOM
+- Ensures reliable order tracking after drag operations
+- Prevents race conditions between DOM updates and reads
+
+## Advanced Features
+
+### Nested Label Support
+
+Gmail supports nested labels using "/" separator (e.g., "Work/Projects/Important"). The extension automatically detects and visually represents this hierarchy:
+
+- **Detection**: Checks if `label.name.includes('/')`
+- **Visual Treatment**: 16px left padding, 2px colored left border
+- **Non-Destructive**: Doesn't modify Gmail labels, only changes display
+- **Filtering**: Nested labels remain searchable by full name or partial name
+
+**Implementation**: See `content.js:257-263` for detection and rendering logic.
+
+### Draggable Panel with Smart Snapping
+
+When collapsed, the FAB button becomes fully draggable with intelligent edge-snapping:
+
+- **Drag Activation**: 300ms hold OR 5px movement prevents accidental drags on click
+- **Window Constraints**: Snaps to edges with 12px safety margin
+- **Smooth Animation**: `cubic-bezier(0.2, 0.0, 0, 1.0)` easing for polished feel
+- **Persistence**: Position saved to `chrome.storage.sync`, restored on page load
+- **Multi-Account**: Each Gmail account remembers its own panel position
+
+**Use Case**: Position panel anywhere on screen to avoid blocking important UI elements.
+
+**Implementation**: See `content.js:825-967` for complete drag logic.
+
+### Label Color Synchronization
+
+The extension extracts and displays Gmail's native label colors:
+
+- **Source**: Gmail REST API `/users/me/labels` response includes color data
+- **Storage**: Colors stored in `labelColorMap` and synced across devices
+- **Display**: Applied as 3px left border on label items in panel
+- **Fallback**: Gray (#9ca3af) for system labels or labels without colors
+- **Performance**: Colors fetched once during label load, cached locally
+
+**Visual Impact**: Helps users quickly identify labels by color, matching Gmail's native UI.
+
+**Implementation**: Color extraction in `sw.js:139-151`, rendering in `content.js:151-165`.
+
+### Multi-Select Toolbar for Bulk Operations
+
+Options page includes powerful multi-select capabilities:
+
+- **Activation**: Check 1+ labels → floating toolbar appears at bottom
+- **Bulk Actions**: "Send to Group" moves all selected labels to target group
+- **Visual Feedback**: Selected count displayed, checkboxes highlighted
+- **Cancel**: Clear selection instantly with cancel button
+- **Efficiency**: Manage dozens of labels with single operation
+
+**Use Case**: Quickly organize newly imported labels or reorganize existing structure.
+
+**Implementation**: See `options.js:626-689` for toolbar rendering and bulk operations.
+
+### Automatic Data Migration
+
+The extension handles format changes transparently:
+
+- **Old Format**: Array-based order `[labelId1, labelId2, ...]`
+- **New Format**: Object-based order `{ groupId: [labelId, ...] }`
+- **Detection**: Checks if `order` is an Array
+- **Migration**: Automatic conversion on first load after update
+- **Logging**: Console warning documents migration for debugging
+- **Cleanup**: Old format cleared after successful migration
+
+**User Impact**: Seamless updates without manual intervention or data loss.
+
+**Implementation**: See `content.js:43-49` and `options.js:76-84`.
+
+### Configuration Validation on Import
+
+Import feature includes robust validation to prevent corruption:
+
+- **Group Reference Validation**: Ensures all `labelGroups[labelId]` point to valid group IDs
+- **Orphan Cleanup**: Removes references to deleted or invalid groups
+- **Non-Breaking**: Invalid data removed silently with console warnings
+- **Idempotent**: Can re-import same config multiple times safely
+- **Version Tracking**: Export includes version number for future compatibility
+
+**Use Case**: Share configurations between devices or users without breaking existing setups.
+
+**Implementation**: See `options.js:170-179` for validation logic.
 
 ## Common Issues & Solutions
 
@@ -290,10 +445,10 @@ Extracts account index from Gmail URL (`/u/0/`, `/u/1/`, etc.)
 ## Code Style & Patterns
 
 ### File Organization
-- **content.js**: Panel UI and Gmail integration (~900 lines)
-- **options.js**: Settings page logic (~830 lines)
-- **options.html**: Settings page HTML/CSS (~700 lines)
-- **sw.js**: Background service worker (~150 lines)
+- **content.js**: Panel UI and Gmail integration (~1,066 lines)
+- **options.js**: Settings page logic (~876 lines)
+- **options.html**: Settings page HTML/CSS (~1,001 lines)
+- **sw.js**: Background service worker (~215 lines)
 
 ### Naming Conventions
 - Functions: `camelCase` (e.g., `renderPanel`, `encodeLabel`)
