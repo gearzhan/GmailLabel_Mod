@@ -474,7 +474,7 @@ function injectPanel() {
         border: none;
         border-radius: var(--md-sys-shape-corner-medium);
         box-shadow: var(--md-elevation-3);
-        width: 320px;
+        width: 280px;
         font-size: 13px;
         line-height: 1.5;
         position: relative;
@@ -878,6 +878,7 @@ function injectPanel() {
   const $clearBtn = shadow.getElementById('clearBtn');
   const $searchBtn = shadow.getElementById('searchBtn');
   const $collapseBtn = shadow.getElementById('collapseBtn');
+  let mouseupTriggeredToggle = false;  // 防止 mouseup 手动触发展开后 click 再次触发
 
   $filterInput.addEventListener('input', (e) => {
     STATE.filterText = e.target.value;
@@ -912,7 +913,7 @@ function injectPanel() {
     navigateSearch(query);
   });
 
-  $collapseBtn.addEventListener('click', () => {
+  function togglePanel() {
     STATE.panelCollapsed = !STATE.panelCollapsed;
     const $panel = shadow.getElementById('panel');
 
@@ -928,6 +929,15 @@ function injectPanel() {
     // 保存面板收起状态
     chrome.storage.sync.set({ panelCollapsed: STATE.panelCollapsed });
     updateTogglePosition();  // 确保位置正确
+  }
+
+  $collapseBtn.addEventListener('click', () => {
+    // 如果 mouseup 已处理过这次点击，则跳过以避免双触发
+    if (mouseupTriggeredToggle) {
+      mouseupTriggeredToggle = false;
+      return;
+    }
+    togglePanel();
   });
 
   // 更新 toggle 按钮的固定位置
@@ -958,6 +968,7 @@ function injectPanel() {
     // 仅收起状态下可拖拽
     if (!STATE.panelCollapsed) return;
 
+    mouseupTriggeredToggle = false;
     isDragging = true;
     isRealDrag = false;  // 初始假设不是拖拽
     dragStartTime = Date.now();  // 记录开始时间
@@ -1012,8 +1023,15 @@ function injectPanel() {
       snapToEdge(host);
       e.preventDefault();
       e.stopPropagation();  // 阻止触发click事件
+    } else if (STATE.panelCollapsed) {
+      // 在收起状态下，简单点击会因为 mousedown 的 preventDefault 阻止原生 click
+      // 在 mouseup 中手动触发展开逻辑
+      togglePanel();
+      mouseupTriggeredToggle = true;
+      e.preventDefault();
+      e.stopPropagation();
     }
-    // 如果不是拖拽（isRealDrag=false），则允许click事件触发展开
+    // 重置拖拽状态（简单点击已在上方处理）
 
     isDragging = false;
     isRealDrag = false;
@@ -1080,9 +1098,6 @@ async function initPanel() {
   const $labelList = shadow.getElementById('labelList');
 
   try {
-    // 加载配置
-    await loadConfig();
-
     // 获取标签
     const response = await getLabels();
 
@@ -1365,6 +1380,9 @@ function waitForGmailReady() {
   await waitForGmailReady();
 
   console.log('[Multi-Label Picker] Gmail loaded, injecting panel...');
+
+  // 先加载配置，确保位置、收起状态等在注入前生效
+  await loadConfig();
 
   // 注入面板
   injectPanel();
