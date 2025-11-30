@@ -1,14 +1,51 @@
 # Gmail Multi-Label Mod
 
-![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
 ![Manifest](https://img.shields.io/badge/manifest-v3-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 
 
 
-**Advanced label management, multi-select search, and Kanban-style organization for power users.**
+**Advanced label management, multi-select search, drag-and-drop label application, and Kanban-style organization for power users.**
 
 Gmail Multi-Label Picker transforms how you interact with Gmail labels. It introduces a native "Material Design" overlay that allows for filtering, draggable label organization without altering your actual Gmail label structure.
+
+------
+
+## ⚠️ Breaking Change in v0.2.0
+
+**Version 0.2.0 introduces drag-and-drop label application, which requires elevated permissions.**
+
+### What Changed
+- OAuth scope upgraded from `gmail.readonly` to `gmail.modify`
+- Extension can now **apply labels** to emails via drag-and-drop
+- **All users must re-authorize** after updating to v0.2.0
+
+### Upgrade Instructions
+
+1. **Update the Extension**
+   - The extension will automatically update via Chrome Web Store
+   - OR manually reload in `chrome://extensions/` if using unpacked version
+
+2. **Re-authorize**
+   - After update, the extension will automatically open the Options page
+   - Your old authentication tokens have been cleared for security
+   - Click **"Authorize Now"** button (or **"Refresh Labels"**)
+   - Grant the new `gmail.modify` permission when prompted
+   - You can now drag labels onto emails to apply them!
+
+3. **Verify**
+   - Go to Gmail
+   - Open the label picker panel (click FAB button)
+   - Try dragging a label onto an email
+   - You should see a success toast notification
+
+### What if I don't want the new permission?
+
+If you prefer to keep read-only access:
+- Stay on v0.1.x (disable auto-update in Chrome)
+- You will not be able to use the drag-and-drop label application feature
+- All other features (label search, filtering, groups) will continue to work
 
 ------
 
@@ -18,6 +55,7 @@ Gmail Multi-Label Picker transforms how you interact with Gmail labels. It intro
 
 
 
+- **Drag-and-Drop Label Application (NEW):** Drag labels directly from the panel onto emails to apply them instantly. Toast notifications confirm success. Works in all Gmail views.
 - **Multi-Select Search:** Select multiple labels to filter emails. Switch easily between **Match ALL** (AND) and **Match ANY** (OR) logic.
 - **Kanban Organization:** Organize your labels into custom groups (e.g., "Work", "Personal", "Backlog") using a drag-and-drop board in the settings.
 - **Visual Customization:** Rename labels (alias) for display purposes and hide unwanted labels from the picker without deleting them from Gmail.
@@ -90,7 +128,7 @@ Because this extension interacts directly with your Gmail data securely, it requ
 3. **App Information:** Fill in the App Name (e.g., "Gmail Label Mod") and your email for support/developer contact.
 4. Click **Save and Continue**.
 5. **Scopes:** Click **Add or Remove Scopes**. Search for and select:
-   - `https://www.googleapis.com/auth/gmail.readonly`
+   - `https://www.googleapis.com/auth/gmail.modify` (Required for label application in v0.2.0+)
 6. Click **Save and Continue**.
 7. **Test Users:** Click **Add Users** and enter your own Gmail address. (This is required until the app is verified by Google, but for personal use, Test Mode is sufficient).
 
@@ -134,6 +172,7 @@ Because this extension interacts directly with your Gmail data securely, it requ
 3. **Click labels** to select them. They will appear as "chips" at the top of the panel.
 4. Use the **ALL / ANY** switch to determine if you want emails containing *all* selected labels or *any* of them.
 5. Click **Search** to filter your inbox.
+6. **NEW: Drag-and-Drop** - Drag any label from the panel and drop it onto an email to apply that label instantly. A toast notification will confirm success or show errors.
 
 
 
@@ -178,4 +217,4 @@ A: The panel is collapsible. Click the floating button to shrink it. You can als
 
 - **Local Storage:** Your OAuth tokens and preferences are stored locally in your browser (`chrome.storage`).
 - **Direct Connection:** The extension communicates directly with Google's API (`googleapis.com`). No data is sent to the developer or third-party analytics servers.
-- **Read-Only Scope:** The extension only requests `gmail.readonly` permission to fetch your label list. It cannot send or delete emails.
+- **Limited Scope:** The extension requests `gmail.modify` permission to fetch labels and apply them to messages. It can read labels and modify message labels, but **cannot** read email contents, send emails, or delete emails. The `gmail.modify` scope is the minimum required for label management.

@@ -62,7 +62,7 @@ async function startOAuthFlow(accountKey = 'u0', interactive = true) {
   }
 
   const redirectUrl = chrome.identity.getRedirectURL();
-  const scopes = 'https://www.googleapis.com/auth/gmail.readonly';
+  const scopes = 'https://www.googleapis.com/auth/gmail.modify';
   const authUser = (accountKey || 'u0').replace(/^u/, '');
 
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
@@ -130,6 +130,11 @@ async function fetchLabels(accountKey = 'u0') {
         await clearToken(accountKey);
         throw new Error('认证已过期，请重新授权');
       }
+      // 403 indicates insufficient permissions (scope issue)
+      if (response.status === 403) {
+        await clearToken(accountKey);
+        throw new Error('Insufficient permissions. Please re-authorize in settings.');
+      }
       throw new Error(`Gmail API error: ${response.status}`);
     }
 
@@ -153,6 +158,55 @@ async function fetchLabels(accountKey = 'u0') {
     return labels;
   } catch (error) {
     console.error('Fetch labels error:', error);
+    throw error;
+  }
+}
+
+// 应用标签到单个消息
+// 使用 messages/modify API 仅应用到特定消息
+async function applyLabelToMessage(accountKey = 'u0', messageId, labelId) {
+  try {
+    const token = await getAuthToken(accountKey);
+
+    console.log(`[SW] Applying label ${labelId} to message ${messageId}`);
+
+    const response = await fetch(
+      `https://www.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          addLabelIds: [labelId]
+        })
+      }
+    );
+
+    if (!response.ok) {
+      // Handle authentication errors
+      if (response.status === 401) {
+        await clearToken(accountKey);
+        throw new Error('Authentication expired. Please re-authorize.');
+      }
+      // Handle permission errors
+      if (response.status === 403) {
+        throw new Error('Insufficient permissions. Please re-authorize in settings.');
+      }
+      // Handle invalid message ID
+      if (response.status === 404) {
+        throw new Error('Message not found.');
+      }
+
+      throw new Error(`Gmail API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('[SW] Label applied successfully:', data);
+    return data;
+  } catch (error) {
+    console.error('[SW] Apply label error:', error);
     throw error;
   }
 }
@@ -203,13 +257,51 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       });
     return true;
   }
+
+  // Handle label application requests
+  if (msg.type === 'APPLY_LABEL') {
+    const accountKey = msg.accountKey || 'u0';
+    const messageId = msg.messageId;
+    const labelId = msg.labelId;
+
+    if (!messageId || !labelId) {
+      sendResponse({ ok: false, error: 'Missing required parameters' });
+      return true;
+    }
+
+    applyLabelToMessage(accountKey, messageId, labelId)
+      .then(data => {
+        sendResponse({ ok: true, data });
+      })
+      .catch(error => {
+        sendResponse({ ok: false, error: error.message });
+      });
+    return true; // Keep message channel open for async response
+  }
 });
 
-// 安装时初始化
+// Install and upgrade initialization
 chrome.runtime.onInstalled.addListener(details => {
   if (details.reason === 'install') {
     console.log('Gmail Multi-Label Picker installed');
-    // 打开配置页面
     chrome.runtime.openOptionsPage();
+  }
+
+  if (details.reason === 'update') {
+    const previousVersion = details.previousVersion;
+    const currentVersion = chrome.runtime.getManifest().version;
+
+    // Detect upgrade from 0.1.x to 0.2.x (scope changed)
+    if (previousVersion && previousVersion.startsWith('0.1') && currentVersion.startsWith('0.2')) {
+      console.log('[MLP] Upgrade detected: clearing old tokens due to scope change');
+      // Clear all old tokens (scope has changed)
+      chrome.storage.local.remove(['tokens']);
+
+      // Open options page to prompt user to re-authorize
+      chrome.runtime.openOptionsPage();
+
+      // Set flag to display upgrade banner
+      chrome.storage.local.set({ scopeUpgradeNeeded: true });
+    }
   }
 });

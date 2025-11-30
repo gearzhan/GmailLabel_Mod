@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gmail Multi-Label Picker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Custom multi-select labels UI for Gmail; rename/sort/hide and search.",
   "permissions": ["identity", "storage"],
   "host_permissions": [

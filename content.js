@@ -266,6 +266,8 @@ function renderLabels(container) {
       html += `
         <div class="label-item ${isSelected ? 'selected' : ''} ${nestedClass}"
              data-label="${safeLabelName}"
+             data-id="${label.id}"
+             draggable="true"
              style="${style}">
           ${safeDisplayName}
         </div>
@@ -312,6 +314,30 @@ function renderLabels(container) {
       renderPanel();
     });
   });
+
+  // Add drag event listeners
+  container.querySelectorAll('.label-item').forEach(item => {
+    // Drag start event
+    item.addEventListener('dragstart', (e) => {
+      const labelId = item.dataset.id;
+      const labelName = item.dataset.label;
+
+      // Set transfer data (use custom MIME type to prevent conflicts)
+      e.dataTransfer.setData('application/x-gmail-mlp-label-id', labelId);
+      e.dataTransfer.setData('application/x-gmail-mlp-label-name', labelName);
+      e.dataTransfer.effectAllowed = 'copy';
+
+      // Visual feedback - semi-transparent
+      item.style.opacity = '0.5';
+
+      console.log(`[MLP] Drag start: ${labelName} (${labelId})`);
+    });
+
+    // Drag end event - restore opacity
+    item.addEventListener('dragend', (e) => {
+      item.style.opacity = '1';
+    });
+  });
 }
 
 // 渲染面板
@@ -325,6 +351,39 @@ function renderPanel() {
   if ($labelList) {
     renderLabels($labelList);
   }
+}
+
+// MD3 Toast notification component
+function showToast(message, type = 'success') {
+  const shadow = document.getElementById('mlp-root')?.shadowRoot;
+  if (!shadow) return;
+
+  // Remove existing toast (if any)
+  const existingToast = shadow.querySelector('.mlp-toast');
+  if (existingToast) {
+    existingToast.remove();
+  }
+
+  // Create new toast
+  const toast = document.createElement('div');
+  toast.className = `mlp-toast mlp-toast-${type}`;
+  toast.textContent = message;
+
+  // Insert into shadow DOM
+  shadow.appendChild(toast);
+
+  // Trigger animation (delay to ensure CSS transition works)
+  setTimeout(() => {
+    toast.classList.add('mlp-toast-show');
+  }, 10);
+
+  // Auto-dismiss after 3 seconds
+  setTimeout(() => {
+    toast.classList.remove('mlp-toast-show');
+    setTimeout(() => {
+      toast.remove();
+    }, 300); // Wait for fade-out animation
+  }, 3000);
 }
 
 // 注入面板 UI
@@ -741,6 +800,37 @@ function injectPanel() {
       .card {
         transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
       }
+      /* Toast notification styles - MD3 Snackbar */
+      .mlp-toast {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        background: var(--md-sys-color-inverse-surface, #313033);
+        color: var(--md-sys-color-inverse-on-surface, #f4eff4);
+        padding: 12px 16px;
+        border-radius: var(--md-sys-shape-corner-small);
+        box-shadow: var(--md-elevation-3);
+        font-size: 14px;
+        font-weight: 400;
+        max-width: 320px;
+        z-index: 10000;
+        opacity: 0;
+        transform: translateY(20px);
+        transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+        pointer-events: none;
+      }
+      .mlp-toast-show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .mlp-toast-success {
+        background: #1e4620;
+        color: #c3ebc5;
+      }
+      .mlp-toast-error {
+        background: #601410;
+        color: #f9dedc;
+      }
     </style>
     <div class="card ${STATE.panelCollapsed ? 'panel-collapsed' : ''}" id="panel">
       <div class="panel-content">
@@ -976,6 +1066,9 @@ function injectPanel() {
 
   // 加载数据
   initPanel();
+
+  // Initialize drag-and-drop
+  initDragAndDrop();
 }
 
 // 初始化面板数据
@@ -1023,6 +1116,220 @@ async function initPanel() {
       </div>
     `;
   }
+}
+
+// Initialize drag-and-drop functionality
+function initDragAndDrop() {
+  let dragOverRow = null; // Current drag-over row
+
+  // Multi-layered Message ID extraction strategy
+  function getMessageIdFromRow(row) {
+    if (!row) return null;
+
+    let foundId = null;
+
+    // Helper: Convert Decimal ID (found in jslog) to Hex (required by API)
+    const normalizeId = (id) => {
+      if (!id) return null;
+      // If the ID is all digits (Decimal), convert to Hex
+      if (/^\d+$/.test(id)) {
+        try {
+          return BigInt(id).toString(16);
+        } catch (e) {
+          console.warn('[MLP] Failed to convert ID to hex:', id);
+          return id;
+        }
+      }
+      return id; // Already Hex or other format
+    };
+
+    // Strategy 0: Parse 'jslog' attribute (MOST RELIABLE for modern Gmail)
+    // The jslog contains base64-encoded JSON with decimal message IDs
+    const jslog = row.getAttribute('jslog');
+    if (jslog) {
+      try {
+        // 1. Extract the Base64 part (usually after "1:")
+        // Format: "18406; u014N:xr6bB,SYhH9d; 1:BASE64_DATA; 4:W10."
+        const match = jslog.match(/1:([^;"]+)/);
+        if (match && match[1]) {
+          // 2. Clean Base64 string (remove trailing non-base64 characters)
+          // Valid base64: A-Z, a-z, 0-9, +, /, =
+          // Gmail sometimes appends trailing periods ('.', '..') which break atob()
+          const cleanedBase64 = match[1].replace(/[^A-Za-z0-9+/=]/g, '');
+
+          // 3. Decode Base64
+          const decoded = atob(cleanedBase64);
+
+          // 4. Parse JSON array
+          // First element contains: "#thread-f:THREAD_ID|msg-f:MESSAGE_ID"
+          const dataArray = JSON.parse(decoded);
+          if (dataArray && dataArray[0]) {
+            // 5. Extract message ID using regex (finds "msg-f:12345...")
+            const idMatch = dataArray[0].match(/(?:msg|thread)-f:(\d+)/);
+            if (idMatch && idMatch[1]) {
+              foundId = idMatch[1];
+              console.log('[MLP] ID found via jslog (decimal):', foundId);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[MLP] Error parsing jslog:', e);
+      }
+    }
+
+    // Strategy 1: Checkbox Input (Standard View)
+    if (!foundId) {
+      const checkbox = row.querySelector('input[name="t"]');
+      if (checkbox) {
+        foundId = checkbox.getAttribute('data-message-id') ||
+                  checkbox.getAttribute('data-legacy-message-id') ||
+                  checkbox.value;
+      }
+    }
+
+    // Strategy 2: Data attributes on row
+    if (!foundId) {
+      foundId = row.getAttribute('data-message-id') ||
+                row.getAttribute('data-legacy-message-id');
+    }
+
+    // Strategy 3: Row ID (e.g. "msg-12345")
+    if (!foundId && row.id && row.id.startsWith('msg-')) {
+      foundId = row.id.replace('msg-', '');
+    }
+
+    // Strategy 4: Link Href parsing
+    if (!foundId) {
+      const link = row.querySelector('a[href*="/mail/"]');
+      if (link) {
+        const hrefMatch = link.href.match(/\/mail\/.*#.*\/([a-f0-9]+)/);
+        if (hrefMatch) foundId = hrefMatch[1];
+      }
+    }
+
+    // Clean up: Ignore placeholder values like '#'
+    if (foundId && foundId.startsWith('#')) {
+      foundId = null;
+    }
+
+    // Normalize: Convert decimal to hex if needed
+    const finalId = normalizeId(foundId);
+
+    if (finalId) {
+      console.log(`[MLP] Final Message ID (hex): ${finalId}`);
+    } else {
+      console.warn('[MLP] Could not extract Message ID from row', row);
+    }
+
+    return finalId;
+  }
+
+  // Add global style: drag-over effect
+  const style = document.createElement('style');
+  style.id = 'mlp-drag-drop-styles';
+  style.textContent = `
+    .mlp-drag-over {
+      background-color: #e8f0fe !important;
+      outline: 2px dashed #1a73e8 !important;
+      outline-offset: -2px;
+      transition: all 0.2s ease;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Event 1: dragover - hovering over Gmail row
+  document.addEventListener('dragover', (e) => {
+    // Only accept our custom drag type
+    if (!e.dataTransfer.types.includes('application/x-gmail-mlp-label-id')) {
+      return;
+    }
+
+    // Find closest email row (Gmail uses tr[role="row"] or div[role="row"])
+    const row = e.target.closest('tr[role="row"], div[role="row"]');
+
+    if (row && row !== dragOverRow) {
+      // Remove old row highlight
+      if (dragOverRow) {
+        dragOverRow.classList.remove('mlp-drag-over');
+      }
+      // Add new row highlight
+      dragOverRow = row;
+      dragOverRow.classList.add('mlp-drag-over');
+    }
+
+    if (row) {
+      e.preventDefault(); // Allow drop
+      e.dataTransfer.dropEffect = 'copy';
+    } else if (dragOverRow) {
+      // Mouse moved out of email row area
+      dragOverRow.classList.remove('mlp-drag-over');
+      dragOverRow = null;
+    }
+  });
+
+  // Event 2: dragleave - drag leaving
+  document.addEventListener('dragleave', (e) => {
+    if (dragOverRow && !dragOverRow.contains(e.relatedTarget)) {
+      dragOverRow.classList.remove('mlp-drag-over');
+      dragOverRow = null;
+    }
+  });
+
+  // Event 3: drop - label dropped
+  document.addEventListener('drop', async (e) => {
+    if (!dragOverRow) return;
+
+    const labelId = e.dataTransfer.getData('application/x-gmail-mlp-label-id');
+    const labelName = e.dataTransfer.getData('application/x-gmail-mlp-label-name');
+
+    if (!labelId) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Extract Message ID
+    const messageId = getMessageIdFromRow(dragOverRow);
+
+    // Remove highlight
+    dragOverRow.classList.remove('mlp-drag-over');
+    const targetRow = dragOverRow; // Save reference for potential future use
+    dragOverRow = null;
+
+    if (!messageId) {
+      console.error('[MLP] Failed to extract Message ID from row');
+      showToast('Could not identify message ID', 'error');
+      return;
+    }
+
+    console.log(`[MLP] Applying label "${labelName}" to message ${messageId}`);
+
+    // Show loading state
+    showToast(`Applying label "${labelName}"...`, 'success');
+
+    // Send to background service
+    chrome.runtime.sendMessage({
+      type: 'APPLY_LABEL',
+      accountKey: getAccountKey(),
+      messageId: messageId,
+      labelId: labelId
+    }, (response) => {
+      if (!response) {
+        console.error('[MLP] No response from background');
+        showToast('Failed to apply label: No response from background', 'error');
+        return;
+      }
+
+      if (!response.ok) {
+        console.error('[MLP] Apply label failed:', response.error);
+        showToast(`Failed: ${response.error}`, 'error');
+      } else {
+        console.log('[MLP] Label applied successfully');
+        showToast(`Label "${labelName}" applied successfully`, 'success');
+      }
+    });
+  });
+
+  console.log('[MLP] Drag-and-drop initialized');
 }
 
 // 等待 Gmail 加载完成

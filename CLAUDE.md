@@ -18,7 +18,10 @@ A Chrome Extension (Manifest V3) that adds a **Material Design 3** multi-label p
 
 **Service Worker (`sw.js`)**
 - OAuth 2.0 authentication using `chrome.identity` API
-- Gmail REST API integration for fetching labels
+- **OAuth Scope** (as of v0.2.0): `https://www.googleapis.com/auth/gmail.modify`
+  - **Capabilities**: Read labels, apply labels to messages
+  - **Breaking Change**: Upgraded from `gmail.readonly` in v0.1.x
+- Gmail REST API integration for fetching and modifying labels
 - Token management with expiration detection and auto-recovery on 401 errors
 - Label color extraction (backgroundColor, textColor) from Gmail API
 - Per-account token storage with expiry timestamps
@@ -27,6 +30,7 @@ A Chrome Extension (Manifest V3) that adds a **Material Design 3** multi-label p
   - `REVOKE_AUTH`: Revoke authentication and clear stored tokens
   - `GET_AUTH_STATUS`: Check current authentication status
   - `GET_CLIENT_ID`: Retrieve stored OAuth Client ID
+  - `APPLY_LABEL`: Apply label to a single message (v0.2.0+)
 
 **Content Script (`content.js`)** - Material Design 3 UI
 - Injects floating panel at bottom-left using Shadow DOM
@@ -38,6 +42,8 @@ A Chrome Extension (Manifest V3) that adds a **Material Design 3** multi-label p
 - Multi-label selection with visual feedback
 - AND/OR search mode toggling
 - Gmail search query builder using `label:` syntax
+- **Drag-and-Drop Label Application** (v0.2.0+): Drag labels onto Gmail email rows to apply them instantly
+- **Toast Notifications** (v0.2.0+): MD3-styled snackbar for success/error feedback
 - **Draggable Panel Positioning**: When collapsed, FAB becomes draggable with edge-snapping (12px margins)
 - **Nested Label Support**: Labels with "/" display with indentation and visual hierarchy
 - **Label Color Sync**: Displays Gmail label colors as left border accents (fallback: gray #9ca3af)
@@ -319,6 +325,36 @@ Gmail supports nested labels using "/" separator (e.g., "Work/Projects/Important
 - **Filtering**: Nested labels remain searchable by full name or partial name
 
 **Implementation**: See `content.js:257-263` for detection and rendering logic.
+
+### Drag-and-Drop Label Application
+
+Apply labels directly to Gmail messages by dragging from the panel:
+
+- **Activation**: Labels are draggable by default (HTML5 `draggable="true"`)
+- **Visual Feedback**: Label becomes semi-transparent (opacity 0.5) during drag
+- **Drop Zones**: Any Gmail email row (`tr[role="row"]` or `div[role="row"]`)
+- **Hover Effect**: Blue dashed outline appears on hover
+- **Message ID Extraction**: Multi-layered fallback strategy (5 methods)
+- **API Call**: Uses `/messages/{id}/modify` endpoint (applies to single message only)
+- **Toast Notifications**: MD3-styled success/error messages at bottom-right
+- **OAuth Scope**: Requires `gmail.modify` (upgraded from `gmail.readonly` in v0.2.0)
+
+**Use Case**: Quickly triage and organize emails without navigating away or using Gmail's built-in label menu.
+
+**Implementation**: See `content.js:initDragAndDrop()` for complete logic.
+
+**Message ID Extraction Strategy**: 5-layer fallback system:
+1. `input[name="t"]` checkbox value or data attributes (95%+ reliability)
+2. `[data-message-id]` attribute on row or children (70% reliability)
+3. Row's own `data-message-id` attribute (60% reliability)
+4. Row `id` attribute with `msg-` prefix (40% reliability)
+5. Parse from `href` in row links (30% reliability)
+
+**Error Handling**: English error messages with toast notifications:
+- "Authentication expired. Please re-authorize." (401 error)
+- "Insufficient permissions. Please re-authorize in settings." (403 error)
+- "Message not found." (404 error)
+- "Could not identify message ID" (extraction failure)
 
 ### Draggable Panel with Smart Snapping
 
