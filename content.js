@@ -1,1391 +1,171 @@
-// Content Script - Inject multi-label picker panel in Gmail
+// Content Script - Main Entry Point
 
-// 应用状态
+// Global State
 const STATE = {
-  allLabels: [],      // 所有标签列表
-  selected: new Set(), // 已选中的标签（真实名称）
-  mode: 'AND',        // 搜索模式：AND 或 OR
-  filterText: '',     // 过滤文本
-  groups: {},         // 自定义分组 { groupId: { name, labelIds: [], collapsed: false } }
-  labelGroups: {},    // 标签到分组的映射 { labelId: groupId }
-  collapsedGroups: new Set(), // 收起的分组 ID
-  panelCollapsed: true, // 面板是否收起（默认收起）
-  panelPosition: { x: 12, y: 16 },  // 面板位置（左边距、底边距）
-  labelColorMap: {}   // 标签颜色映射 { labelId: { backgroundColor, textColor } }
+  allLabels: [],
+  selected: new Set(),
+  mode: 'AND',
+  filterText: '',
+  groups: {},
+  panelCollapsed: true, // Default
+  panelPosition: { x: 12, y: 16 }
 };
 
-// 安全转义文本，防止注入
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+// Services
+const gmailAdapter = new GmailAdapter();
+let panelUI = null;
+let dragDropHandler = null;
+
+// Account Key Helper
+function getAccountIndex() {
+  const match = location.pathname.match(/\/u\/(\d+)/);
+  return match ? match[1] : '0';
 }
 
-// 从存储加载配置
+function getAccountKey() {
+  return `u${getAccountIndex()}`;
+}
+
+// Config Loader
 async function loadConfig() {
   return new Promise((resolve) => {
     chrome.storage.sync.get([
+      'panelCollapsed',
+      'panelPosition',
       'displayNameMap',
       'order',
       'hidden',
       'groups',
-      'labelGroups',
-      'collapsedGroups',
-      'panelCollapsed',
-      'panelPosition',
-      'labelColorMap'
+      'labelGroups'
     ], (data) => {
-      STATE.displayNameMap = data.displayNameMap || {};
-
-      // 数据迁移：将旧的数组格式转换为对象格式
-      if (Array.isArray(data.order)) {
-        console.warn('[Panel Order] Migrating old array format to object format');
-        STATE.order = {};  // 重置为空对象
-      } else {
-        STATE.order = data.order || {};  // 加载为对象
-      }
-
-      STATE.hidden = new Set(data.hidden || []);
+      if (data.panelCollapsed !== undefined) STATE.panelCollapsed = data.panelCollapsed;
+      if (data.panelPosition) STATE.panelPosition = data.panelPosition;
       STATE.groups = data.groups || {};
+      STATE.displayNameMap = data.displayNameMap || {};
+      STATE.order = data.order || {};
+      STATE.hidden = new Set(data.hidden || []);
       STATE.labelGroups = data.labelGroups || {};
-      STATE.collapsedGroups = new Set(data.collapsedGroups || []);
-      // 加载面板收起状态，如果未设置则使用默认值（true）
-      STATE.panelCollapsed = data.panelCollapsed !== undefined ? data.panelCollapsed : true;
-      // 加载面板位置，如果未设置则使用默认值（左下角）
-      STATE.panelPosition = data.panelPosition || { x: 12, y: 16 };
-      // 加载标签颜色映射
-      STATE.labelColorMap = data.labelColorMap || {};
       resolve();
     });
   });
 }
 
-// 从后台获取标签列表
+// Label Fetcher
 async function getLabels() {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage({ type: 'GET_LABELS', accountKey: getAccountKey() }, (response) => {
+    chrome.runtime.sendMessage({
+      type: 'GET_LABELS',
+      accountKey: getAccountKey()
+    }, (response) => {
       resolve(response);
     });
   });
 }
 
-// 编码标签为搜索语法
-// Gmail UI 习惯：小写并将空格、斜杠、& 转为短横线
-function encodeLabel(labelName) {
-  const normalized = labelName
-    .toLowerCase()
-    .replace(/[\s/&]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-  return `label:${normalized}`;
-}
-
-// 构建搜索查询
-function buildQuery() {
-  const labels = Array.from(STATE.selected);
-  if (labels.length === 0) return '';
-
-  if (STATE.mode === 'AND') {
-    return labels.map(encodeLabel).join(' ');
-  } else {
-    return labels.map(encodeLabel).join(' OR ');
-  }
-}
-
-// 获取当前账号索引
-function getAccountIndex() {
-  const match = location.href.match(/\/u\/(\d+)\//);
-  return match ? match[1] : '0';
-}
-
-// 构建账号键，用于隔离 token
-function getAccountKey() {
-  return `u${getAccountIndex()}`;
-}
-
-// 导航到搜索结果
-function navigateSearch(query) {
-  if (!query) {
-    alert('Please select at least one label');
-    return;
-  }
-  const accountIndex = getAccountIndex();
-  const url = `https://mail.google.com/mail/u/${accountIndex}/#search/${encodeURIComponent(query)}`;
-  location.assign(url);
-}
-
-// 获取标签显示名称
-function getDisplayName(labelName) {
-  return STATE.displayNameMap[labelName] || labelName;
-}
-
-// 检查标签是否隐藏
-function isHidden(labelName) {
-  return STATE.hidden.has(labelName);
-}
-
-// 获取分组内的标签
-function getGroupLabels(groupId) {
-  return STATE.allLabels.filter(label => {
-    const labelGroupId = STATE.labelGroups[label.id] ||
-                        (label.type === 'system' ? 'system' : 'ungrouped');
-    return labelGroupId === groupId;
-  });
-}
-
-// 检查分组是否应该显示
-function shouldShowGroup(groupId) {
-  const labels = getGroupLabels(groupId);
-  // 如果分组为空，不显示
-  if (labels.length === 0) return false;
-
-  // 如果所有标签都隐藏，不显示
-  const visibleLabels = labels.filter(label => !isHidden(label.name));
-  return visibleLabels.length > 0;
-}
-
-// 获取标签颜色样式
-function getLabelColor(labelId) {
-  const colors = STATE.labelColorMap[labelId];
-  if (colors && colors.backgroundColor) {
-    return {
-      backgroundColor: colors.backgroundColor,
-      textColor: colors.textColor || '#ffffff'
-    };
-  }
-
-  // 默认灰色方案
-  return {
-    backgroundColor: '#9ca3af',
-    textColor: '#ffffff'
-  };
-}
-
-// 辅助函数 - 根据排序获取标签
+// Business Logic: Sorting
 function getSortedLabelsForGroup(labels, groupId) {
-  if (!STATE.order || !STATE.order[groupId] || STATE.order[groupId].length === 0) {
-    console.log(`[Panel Order] No saved order for ${groupId}, using alphabetical`);
-    // 无排序数据，按字母顺序
-    return labels.sort((a, b) => {
-      const nameA = getDisplayName(a.name).toLowerCase();
-      const nameB = getDisplayName(b.name).toLowerCase();
-      return nameA.localeCompare(nameB);
-    });
+  if (!STATE.order[groupId] || STATE.order[groupId].length === 0) {
+    return labels.sort((a, b) => a.name.localeCompare(b.name));
   }
-
-  console.log(`[Panel Order] Applying saved order for ${groupId}:`, STATE.order[groupId]);
-
   const orderMap = {};
-  STATE.order[groupId].forEach((labelId, index) => {
-    orderMap[labelId] = index;
-  });
+  STATE.order[groupId].forEach((id, idx) => orderMap[id] = idx);
 
   return labels.sort((a, b) => {
-    const orderA = orderMap[a.id] !== undefined ? orderMap[a.id] : 999999;
-    const orderB = orderMap[b.id] !== undefined ? orderMap[b.id] : 999999;
-    if (orderA !== orderB) return orderA - orderB;
-
-    const nameA = getDisplayName(a.name).toLowerCase();
-    const nameB = getDisplayName(b.name).toLowerCase();
-    return nameA.localeCompare(nameB);
+    const oa = orderMap[a.id] !== undefined ? orderMap[a.id] : 999999;
+    const ob = orderMap[b.id] !== undefined ? orderMap[b.id] : 999999;
+    return oa - ob || a.name.localeCompare(b.name);
   });
 }
 
-// 渲染标签列表
-function renderLabels(container) {
-  const filterText = STATE.filterText.toLowerCase();
-
-  // 获取所有分组
-  const allGroupIds = new Set([
-    'system',
-    'ungrouped',
-    ...Object.keys(STATE.groups)
-  ]);
-
-  let html = '';
-
-  for (const groupId of allGroupIds) {
-    if (!shouldShowGroup(groupId)) continue;
-
-    const isCollapsed = STATE.collapsedGroups.has(groupId);
-    const groupLabels = getGroupLabels(groupId);
-
-    // 过滤标签
-    const visibleLabels = groupLabels.filter(label => {
-      if (isHidden(label.name)) return false;
-      if (!filterText) return true;
-
-      const displayName = getDisplayName(label.name).toLowerCase();
-      const realName = label.name.toLowerCase();
-      return displayName.includes(filterText) || realName.includes(filterText);
-    });
-
-    if (visibleLabels.length === 0) continue;
-
-    // 应用排序（如果有排序数据）
-    const sortedLabels = getSortedLabelsForGroup(visibleLabels, groupId);
-
-    // 获取分组名称
-    let groupName = 'Ungrouped';
-    if (groupId === 'system') {
-      groupName = 'System';
-    } else if (STATE.groups[groupId]) {
-      groupName = STATE.groups[groupId].name;
-    }
-    const safeGroupName = escapeHtml(groupName);
-
-    html += `
-      <div class="label-group" data-group-id="${groupId}">
-        <div class="group-header" data-group-id="${groupId}">
-          <span class="group-toggle">${isCollapsed ? '▶' : '▼'}</span>
-          <span class="group-name">${safeGroupName}</span>
-          <span class="group-count">(${sortedLabels.length})</span>
-        </div>
-        <div class="group-labels" style="${isCollapsed ? 'display: none;' : ''}">
-    `;
-
-    sortedLabels.forEach(label => {
-      const displayName = getDisplayName(label.name);
-      const isSelected = STATE.selected.has(label.name);
-      const colors = getLabelColor(label.id);
-      const safeDisplayName = escapeHtml(displayName);
-      const safeLabelName = escapeHtml(label.name);
-
-      // 检测嵌套标签（包含 /）
-      const isNested = label.name.includes('/');
-      const nestedClass = isNested ? 'nested-label' : '';
-
-      // 使用MD3基础样式，label颜色作为左边框装饰
-      const style = isSelected
-        ? `border-left: 3px solid ${colors.backgroundColor};`
-        : `border-left: 3px solid ${colors.backgroundColor}; opacity: 0.7;`;
-
-      html += `
-        <div class="label-item ${isSelected ? 'selected' : ''} ${nestedClass}"
-             data-label="${safeLabelName}"
-             data-id="${label.id}"
-             draggable="true"
-             style="${style}">
-          ${safeDisplayName}
-        </div>
-      `;
-    });
-
-    html += `
-        </div>
-      </div>
-    `;
-  }
-
-  if (html === '') {
-    container.innerHTML = '<div class="empty-state">No labels found</div>';
-  } else {
-    container.innerHTML = html;
-  }
-
-  // 绑定事件
-  container.querySelectorAll('.label-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-      const labelName = item.dataset.label;
-      if (STATE.selected.has(labelName)) {
-        STATE.selected.delete(labelName);
-      } else {
-        STATE.selected.add(labelName);
-      }
-      renderPanel();
-    });
+// Business Logic: Color
+async function getLabelColorMap() {
+  return new Promise(resolve => {
+    chrome.storage.sync.get(['labelColorMap'], (data) => resolve(data.labelColorMap || {}));
   });
+}
+let labelColorMap = {};
 
-  container.querySelectorAll('.group-header').forEach(header => {
-    header.addEventListener('click', () => {
-      const groupId = header.dataset.groupId;
-      if (STATE.collapsedGroups.has(groupId)) {
-        STATE.collapsedGroups.delete(groupId);
-      } else {
-        STATE.collapsedGroups.add(groupId);
-      }
-      // 保存状态
-      chrome.storage.sync.set({
-        collapsedGroups: Array.from(STATE.collapsedGroups)
+// Main Injection
+async function init() {
+  await loadConfig();
+  labelColorMap = await getLabelColorMap();
+
+  // Instantiate UI
+  panelUI = new PanelUI(STATE, MLP_STYLES, {
+    onCollapseChange: (collapsed) => {
+      chrome.storage.sync.set({ panelCollapsed: collapsed });
+    },
+    onSnap: (host) => {
+      gmailAdapter.snapToEdge(host, (pos) => {
+        STATE.panelPosition = pos;
+        chrome.storage.sync.set({ panelPosition: pos });
+        panelUI.updatePosition();
       });
-      renderPanel();
-    });
-  });
+    },
+    getDisplayName: (name) => STATE.displayNameMap[name] || name,
+    isHidden: (name) => STATE.hidden.has(name),
+    getGroupId: (id) => STATE.labelGroups[id] || (STATE.allLabels.find(l => l.id === id)?.type === 'system' ? 'system' : 'ungrouped'),
+    getLabelColor: (id) => labelColorMap[id] || {},
+    sortLabels: getSortedLabelsForGroup,
+    onLabelClick: (name) => {
+      if (STATE.selected.has(name)) STATE.selected.delete(name);
+      else STATE.selected.add(name);
+    },
+    onSearch: () => {
+      // Build Query
+      const terms = Array.from(STATE.selected).map(labelName => {
+        // Encode label name logic (simplified)
+        const safeName = labelName.replace(/ /g, '-').replace(/&/g, '-');
+        return `label:${safeName}`;
+      });
 
-  // Add drag event listeners
-  container.querySelectorAll('.label-item').forEach(item => {
-    // Drag start event
-    item.addEventListener('dragstart', (e) => {
-      const labelId = item.dataset.id;
-      const labelName = item.dataset.label;
-
-      // Set transfer data (use custom MIME type to prevent conflicts)
-      e.dataTransfer.setData('application/x-gmail-mlp-label-id', labelId);
-      e.dataTransfer.setData('application/x-gmail-mlp-label-name', labelName);
-      e.dataTransfer.effectAllowed = 'copy';
-
-      // Visual feedback - semi-transparent
-      item.style.opacity = '0.5';
-
-      console.log(`[MLP] Drag start: ${labelName} (${labelId})`);
-    });
-
-    // Drag end event - restore opacity
-    item.addEventListener('dragend', (e) => {
-      item.style.opacity = '1';
-    });
-  });
-}
-
-// 渲染面板
-function renderPanel() {
-  const shadow = document.getElementById('mlp-root')?.shadowRoot;
-  if (!shadow) return;
-
-  const $labelList = shadow.getElementById('labelList');
-
-  // 渲染标签列表
-  if ($labelList) {
-    renderLabels($labelList);
-  }
-}
-
-// MD3 Toast notification component
-function showToast(message, type = 'success') {
-  const shadow = document.getElementById('mlp-root')?.shadowRoot;
-  if (!shadow) return;
-
-  // Remove existing toast (if any)
-  const existingToast = shadow.querySelector('.mlp-toast');
-  if (existingToast) {
-    existingToast.remove();
-  }
-
-  // Create new toast
-  const toast = document.createElement('div');
-  toast.className = `mlp-toast mlp-toast-${type}`;
-  toast.textContent = message;
-
-  // Insert into shadow DOM
-  shadow.appendChild(toast);
-
-  // Trigger animation (delay to ensure CSS transition works)
-  setTimeout(() => {
-    toast.classList.add('mlp-toast-show');
-  }, 10);
-
-  // Auto-dismiss after 3 seconds
-  setTimeout(() => {
-    toast.classList.remove('mlp-toast-show');
-    setTimeout(() => {
-      toast.remove();
-    }, 300); // Wait for fade-out animation
-  }, 3000);
-}
-
-// 注入面板 UI
-function injectPanel() {
-  // 防止重复注入
-  if (document.getElementById('mlp-root')) return;
-
-  // 创建容器
-  const host = document.createElement('div');
-  host.id = 'mlp-root';
-  // 使用STATE中保存的位置，宽度根据收起状态动态设置
-  host.style.cssText = `
-    position: fixed;
-    bottom: ${STATE.panelPosition.y}px;
-    left: ${STATE.panelPosition.x}px;
-    width: ${STATE.panelCollapsed ? '32px' : '320px'};
-    z-index: 9999;
-    font-family: 'Google Sans', 'Roboto', Arial, sans-serif;
-  `;
-
-  // 使用 Shadow DOM 隔离样式
-  const shadow = host.attachShadow({ mode: 'open' });
-
-  // 创建面板内容
-  const wrapper = document.createElement('div');
-  wrapper.innerHTML = `
-    <style>
-      /* Material Design 3 Design Tokens - Gmail themed */
-      :host {
-        /* Primary Colors */
-        --md-sys-color-primary: #0b57d0;
-        --md-sys-color-on-primary: #ffffff;
-        --md-sys-color-primary-container: #d3e3fd;
-        --md-sys-color-on-primary-container: #041e49;
-
-        /* Secondary Colors */
-        --md-sys-color-secondary: #5a5d72;
-        --md-sys-color-on-secondary: #ffffff;
-        --md-sys-color-secondary-container: #e8def8;
-        --md-sys-color-on-secondary-container: #1d192b;
-
-        /* Surface Colors */
-        --md-sys-color-surface: #fdfcff;
-        --md-sys-color-surface-dim: #dfe2eb;
-        --md-sys-color-surface-bright: #fdfcff;
-        --md-sys-color-surface-container-lowest: #ffffff;
-        --md-sys-color-surface-container-low: #f7f9ff;
-        --md-sys-color-surface-container: #f0f4f9;
-        --md-sys-color-surface-container-high: #e8ebed;
-        --md-sys-color-surface-container-highest: #e3e5e8;
-        --md-sys-color-on-surface: #1a1c1e;
-        --md-sys-color-on-surface-variant: #44474e;
-
-        /* Outline */
-        --md-sys-color-outline: #747775;
-        --md-sys-color-outline-variant: #c4c6c4;
-
-        /* Error Colors */
-        --md-sys-color-error: #ba1a1a;
-        --md-sys-color-on-error: #ffffff;
-        --md-sys-color-error-container: #ffdad6;
-        --md-sys-color-on-error-container: #410002;
-
-        /* Elevation Shadows - MD3 Standard */
-        --md-elevation-1:
-          0px 1px 2px 0px rgba(0, 0, 0, 0.3),
-          0px 1px 3px 1px rgba(0, 0, 0, 0.15);
-        --md-elevation-2:
-          0px 1px 2px 0px rgba(0, 0, 0, 0.3),
-          0px 2px 6px 2px rgba(0, 0, 0, 0.15);
-        --md-elevation-3:
-          0px 4px 8px 3px rgba(0, 0, 0, 0.15),
-          0px 1px 3px rgba(0, 0, 0, 0.3);
-
-        /* Shape Tokens */
-        --md-sys-shape-corner-none: 0px;
-        --md-sys-shape-corner-extra-small: 4px;
-        --md-sys-shape-corner-small: 8px;
-        --md-sys-shape-corner-medium: 12px;
-        --md-sys-shape-corner-large: 16px;
-        --md-sys-shape-corner-extra-large: 28px;
-        --md-sys-shape-corner-full: 9999px;
+      let query = '';
+      if (terms.length > 0) {
+        if (STATE.mode === 'OR') {
+          query = `{${terms.join(' ')}}`;
+        } else {
+          query = terms.join(' ');
+        }
       }
 
-      * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Google Sans', 'Roboto', Arial, sans-serif; }
-      .card {
-        background: var(--md-sys-color-surface);
-        border: none;
-        border-radius: var(--md-sys-shape-corner-medium);
-        box-shadow: var(--md-elevation-3);
-        width: 280px;
-        font-size: 13px;
-        line-height: 1.5;
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        margin-bottom: 70px;
-        transition: opacity 0.2s ease, transform 0.2s ease;
+      if (query) {
+        // Navigate
+        const accountIndex = getAccountIndex();
+        const searchUrl = `https://mail.google.com/mail/u/${accountIndex}/#search/${encodeURIComponent(query)}`;
+        window.location.href = searchUrl;
       }
-      .panel-content {
-        padding: 10px;
-        display: flex;
-        flex-direction: column;
-        max-height: 500px;
-      }
-      .controls {
-        flex-shrink: 0;
-        display: flex;
-        gap: 7px;
-        margin-bottom: 6px;
-        margin-top: 6px;
-        padding-top: 6px;
-        border-top: 1px solid #e5e7eb;
-        flex-wrap: wrap;
-      }
-      .filter-container {
-        position: relative;
-        flex: 1;
-        min-width: 140px;
-      }
-      .filter-icon {
-        position: absolute;
-        left: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 14px;
-        height: 14px;
-        color: var(--md-sys-color-on-surface-variant);
-        pointer-events: none;
-        opacity: 0.6;
-      }
-      .filter-input {
-        width: 100%;
-        padding: 7px 11px 7px 30px;
-        border: 1px solid var(--md-sys-color-outline-variant);
-        border-radius: 20px;
-        font-size: 12px;
-        height: 30px;
-        outline: none;
-        background: var(--md-sys-color-surface-container);
-        color: var(--md-sys-color-on-surface);
-      }
-      .filter-input:focus {
-        border-color: var(--md-sys-color-primary);
-        background: var(--md-sys-color-surface);
-      }
-      /* Sliding Pill Toggle - MD3 */
-      .mode-switch {
-        position: relative;
-        display: flex;
-        background: var(--md-sys-color-surface-container-high);
-        border-radius: 18px;
-        padding: 3px;
-        gap: 2px;
-        height: 30px;
-        cursor: pointer;
-        min-width: 90px;
-      }
-      /* Animated sliding pill background */
-      .toggle-pill {
-        position: absolute;
-        top: 3px;
-        left: 3px;
-        width: calc(50% - 4px);
-        height: calc(100% - 6px);
-        background: var(--md-sys-color-secondary-container);
-        border-radius: 14px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        transition: transform 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
-        z-index: 1;
-        pointer-events: none;
-      }
-      /* Slide pill right when ANY mode */
-      .mode-switch.mode-any .toggle-pill {
-        transform: translateX(calc(100% + 2px));
-      }
-      .mode-option {
-        flex: 1;
-        padding: 5px 12px;
-        border-radius: 14px;
-        font-size: 11px;
-        font-weight: 600;
-        cursor: pointer;
-        border: none;
-        background: transparent;
-        color: var(--md-sys-color-on-surface-variant);
-        transition: color 0.25s cubic-bezier(0.4, 0.0, 0.2, 1);
-        white-space: nowrap;
-        z-index: 2;
-        position: relative;
-        text-align: center;
-      }
-      .mode-option.active {
-        color: var(--md-sys-color-on-secondary-container);
-      }
-      .mode-option:hover:not(.active) {
-        color: var(--md-sys-color-on-surface);
-      }
-      .btn {
-        padding: 5px 11px;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        background: #f9fafb;
-        cursor: pointer;
-        font-size: 11px;
-        font-weight: 500;
-        height: 26px;
-        transition: all 0.15s;
-        white-space: nowrap;
-      }
-      .btn:hover {
-        background: #f3f4f6;
-        border-color: #9ca3af;
-      }
-      .btn.primary {
-        background: #3b82f6;
-        color: white;
-        border-color: #3b82f6;
-      }
-      .btn.primary:hover {
-        background: #2563eb;
-      }
-      .btn.mode-or {
-        background: #f59e0b;
-        color: white;
-        border-color: #f59e0b;
-      }
-      .btn.mode-or:hover {
-        background: #d97706;
-      }
-      .btn.text-link {
-        background: transparent;
-        border: none;
-        color: var(--md-sys-color-on-surface-variant);
-        padding: 5px 8px;
-        text-decoration: underline;
-        text-decoration-color: transparent;
-        transition: all 0.15s;
-        height: auto;
-      }
-      .btn.text-link:hover {
-        background: transparent;
-        color: var(--md-sys-color-primary);
-        text-decoration-color: var(--md-sys-color-primary);
-      }
-      .label-list {
-        flex: 1;
-        overflow-y: auto;
-        border-top: none;
-        padding-top: 0;
-        margin-bottom: 0;
-      }
-      .label-list::-webkit-scrollbar {
-        width: 5px;
-      }
-      .label-list::-webkit-scrollbar-track {
-        background: #f3f4f6;
-        border-radius: 3px;
-      }
-      .label-list::-webkit-scrollbar-thumb {
-        background: #d1d5db;
-        border-radius: 3px;
-      }
-      .label-group {
-        margin-bottom: 6px;
-      }
-      .group-header {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        padding: 5px 7px;
-        background: #f9fafb;
-        border-radius: 4px;
-        cursor: pointer;
-        user-select: none;
-        margin-bottom: 4px;
-        font-weight: 500;
-        font-size: 11px;
-        color: #374151;
-      }
-      .group-header:hover {
-        background: #f3f4f6;
-      }
-      .group-toggle {
-        font-size: 10px;
-        color: #6b7280;
-      }
-      .group-name {
-        flex: 1;
-      }
-      .group-count {
-        font-size: 11px;
-        color: #9ca3af;
-        font-weight: normal;
-      }
-      .group-labels {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 2px;
-        padding-left: 8px;
-      }
-      .label-item {
-        padding: 3px 12px;
-        margin: 1px 0;
-        cursor: pointer;
-        user-select: none;
-        transition: all 0.15s cubic-bezier(0.2, 0.0, 0, 1.0);
-        font-size: 11px;
-        font-weight: 400;
-        border-radius: 16px;
-        line-height: 1.3;
-        white-space: nowrap;
-        border: 1px solid transparent;
-        color: var(--md-sys-color-on-surface);
-        background: var(--md-sys-color-surface-container);
-      }
-      .label-item:hover {
-        background: var(--md-sys-color-surface-container-high);
-        transform: translateX(2px);
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-      }
-      .label-item.selected {
-        background: var(--md-sys-color-primary-container);
-        color: var(--md-sys-color-on-primary-container);
-        border-color: var(--md-sys-color-outline);
-        font-weight: 500;
-      }
-      .label-item.selected:hover {
-        filter: brightness(0.95);
-      }
-      .label-item.nested-label {
-        margin-left: 10px;
-        border-left: 2px solid var(--md-sys-color-outline-variant);
-        padding-left: 10px;
-      }
-      .action-bar {
-        flex-shrink: 0;
-        margin-top: 0;
-        padding-top: 0;
-        border-top: none;
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-        gap: 6px;
-      }
-      .empty-state {
-        text-align: center;
-        padding: 24px 12px;
-        color: #9ca3af;
-        font-size: 12px;
-      }
-      .loading {
-        text-align: center;
-        padding: 24px 12px;
-        color: #6b7280;
-        font-size: 12px;
-      }
-      .error {
-        padding: 10px;
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        border-radius: 6px;
-        color: #991b1b;
-        font-size: 12px;
-        margin-bottom: 10px;
-      }
-      .collapse-toggle {
-        position: fixed;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background: var(--md-sys-color-primary-container);
-        color: var(--md-sys-color-on-primary-container);
-        border: none;
-        cursor: grab;
-        font-size: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s cubic-bezier(0.2, 0.0, 0, 1.0);
-        box-shadow: var(--md-elevation-3);
-        z-index: 10;
-        padding: 0;
-      }
-      .collapse-toggle:hover {
-        background: var(--md-sys-color-primary-container);
-        transform: scale(1.05);
-        box-shadow: var(--md-elevation-3);
-        filter: brightness(0.95);
-      }
-      .collapse-toggle:active {
-        cursor: grabbing;
-        transform: scale(1.0);
-      }
-      .collapse-toggle.dragging {
-        cursor: grabbing;
-        transition: none;
-      }
-      .panel-collapsed {
-        width: 32px;
-        height: 32px;
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        pointer-events: none;  /* 整个面板不捕获点击事件 */
-      }
-      .panel-collapsed .panel-content {
-        display: none;
-      }
-      .panel-collapsed .collapse-toggle {
-        pointer-events: auto;  /* 仅按钮可点击 */
-      }
-      .card {
-        transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-      }
-      /* Toast notification styles - MD3 Snackbar */
-      .mlp-toast {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        background: var(--md-sys-color-inverse-surface, #313033);
-        color: var(--md-sys-color-inverse-on-surface, #f4eff4);
-        padding: 12px 16px;
-        border-radius: var(--md-sys-shape-corner-small);
-        box-shadow: var(--md-elevation-3);
-        font-size: 14px;
-        font-weight: 400;
-        max-width: 320px;
-        z-index: 10000;
-        opacity: 0;
-        transform: translateY(20px);
-        transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
-        pointer-events: none;
-      }
-      .mlp-toast-show {
-        opacity: 1;
-        transform: translateY(0);
-      }
-      .mlp-toast-success {
-        background: #1e4620;
-        color: #c3ebc5;
-      }
-      .mlp-toast-error {
-        background: #601410;
-        color: #f9dedc;
-      }
-    </style>
-    <div class="card ${STATE.panelCollapsed ? 'panel-collapsed' : ''}" id="panel">
-      <div class="panel-content">
-        <div id="errorContainer"></div>
-        <div class="label-list" id="labelList">
-          <div class="loading">Loading labels...</div>
-        </div>
-        <div class="controls">
-          <div class="filter-container">
-            <svg class="filter-icon" width="16" height="16" viewBox="0 0 128 128" fill="currentColor">
-              <path d="M42 60L52 70L70 45" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <input
-              type="search"
-              class="filter-input"
-              id="filterInput"
-              placeholder="Filter labels..."
-            />
-          </div>
-          <div class="mode-switch ${STATE.mode === 'OR' ? 'mode-any' : ''}" id="modeSwitch">
-            <div class="toggle-pill"></div>
-            <button class="mode-option ${STATE.mode === 'AND' ? 'active' : ''}" data-val="AND">AND</button>
-            <button class="mode-option ${STATE.mode === 'OR' ? 'active' : ''}" data-val="OR">OR</button>
-          </div>
-        </div>
-        <div class="action-bar">
-          <button class="btn text-link" id="clearBtn">Clear</button>
-          <button class="btn primary" id="searchBtn">Search</button>
-        </div>
-      </div>
-      <button class="collapse-toggle" id="collapseBtn" title="${STATE.panelCollapsed ? 'Expand panel' : 'Collapse panel'}">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/>
-        </svg>
-      </button>
-    </div>
-  `;
-
-  shadow.appendChild(wrapper);
-  document.body.appendChild(host);
-
-  // 绑定事件
-  const $filterInput = shadow.getElementById('filterInput');
-  const $modeSwitch = shadow.getElementById('modeSwitch');
-  const $clearBtn = shadow.getElementById('clearBtn');
-  const $searchBtn = shadow.getElementById('searchBtn');
-  const $collapseBtn = shadow.getElementById('collapseBtn');
-  let mouseupTriggeredToggle = false;  // 防止 mouseup 手动触发展开后 click 再次触发
-
-  $filterInput.addEventListener('input', (e) => {
-    STATE.filterText = e.target.value;
-    renderPanel();
-  });
-
-  // 绑定滑动切换按钮事件
-  $modeSwitch.querySelectorAll('.mode-option').forEach(btn => {
-    btn.addEventListener('click', () => {
-      STATE.mode = btn.dataset.val;
-
-      // 更新active状态
-      $modeSwitch.querySelectorAll('.mode-option').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      // 切换滑动pill动画
-      if (STATE.mode === 'OR') {
-        $modeSwitch.classList.add('mode-any');
-      } else {
-        $modeSwitch.classList.remove('mode-any');
-      }
-    });
-  });
-
-  $clearBtn.addEventListener('click', () => {
-    STATE.selected.clear();
-    renderPanel();
-  });
-
-  $searchBtn.addEventListener('click', () => {
-    const query = buildQuery();
-    navigateSearch(query);
-  });
-
-  function togglePanel() {
-    STATE.panelCollapsed = !STATE.panelCollapsed;
-    const $panel = shadow.getElementById('panel');
-
-    if (STATE.panelCollapsed) {
-      $panel.classList.add('panel-collapsed');
-      $collapseBtn.title = 'Expand panel';
-      host.style.width = '32px';  // 收起时缩小host宽度
-    } else {
-      $panel.classList.remove('panel-collapsed');
-      $collapseBtn.title = 'Collapse panel';
-      host.style.width = '320px';  // 展开时恢复host宽度
-    }
-    // 保存面板收起状态
-    chrome.storage.sync.set({ panelCollapsed: STATE.panelCollapsed });
-    updateTogglePosition();  // 确保位置正确
-  }
-
-  $collapseBtn.addEventListener('click', () => {
-    // 如果 mouseup 已处理过这次点击，则跳过以避免双触发
-    if (mouseupTriggeredToggle) {
-      mouseupTriggeredToggle = false;
-      return;
-    }
-    togglePanel();
-  });
-
-  // 更新 toggle 按钮的固定位置
-  function updateTogglePosition() {
-    const shadow = document.getElementById('mlp-root')?.shadowRoot;
-    if (!shadow) return;
-
-    const $collapseBtn = shadow.getElementById('collapseBtn');
-    if (!$collapseBtn) return;
-
-    // 固定在屏幕的 panelPosition 位置（左下角）
-    $collapseBtn.style.left = `${STATE.panelPosition.x}px`;
-    $collapseBtn.style.bottom = `${STATE.panelPosition.y}px`;
-  }
-
-  // 初始设置 toggle 位置
-  updateTogglePosition();
-
-  // 拖拽相关变量
-  let isDragging = false;
-  let isRealDrag = false;  // 标记是否为真正的拖拽
-  let dragStartX, dragStartY;
-  let originalX, originalY;
-  let dragStartTime = 0;  // 拖拽开始时间
-
-  // 鼠标按下事件 - 开始拖拽
-  $collapseBtn.addEventListener('mousedown', (e) => {
-    // 仅收起状态下可拖拽
-    if (!STATE.panelCollapsed) return;
-
-    mouseupTriggeredToggle = false;
-    isDragging = true;
-    isRealDrag = false;  // 初始假设不是拖拽
-    dragStartTime = Date.now();  // 记录开始时间
-    dragStartX = e.clientX;
-    dragStartY = e.clientY;
-
-    const rect = host.getBoundingClientRect();
-    originalX = rect.left;
-    originalY = window.innerHeight - rect.bottom;
-
-    // 添加拖拽类，显示 grabbing 光标
-    $collapseBtn.classList.add('dragging');
-
-    e.preventDefault();
-    e.stopPropagation();  // 阻止事件冒泡
-  });
-
-  // 鼠标移动事件 - 拖拽中
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-
-    const deltaX = e.clientX - dragStartX;
-    const deltaY = dragStartY - e.clientY;  // Y轴反向（bottom定位）
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    const elapsed = Date.now() - dragStartTime;
-
-    // 判断是否为真正的拖拽（时间超过300ms 或 移动超过5px）
-    if (!isRealDrag && (elapsed > 300 || distance > 5)) {
-      isRealDrag = true;
-    }
-
-    if (isRealDrag) {
-      const newX = originalX + deltaX;
-      const newY = originalY + deltaY;
-
-      // 实时更新位置（无过渡）
-      host.style.transition = 'none';
-      host.style.left = `${newX}px`;
-      host.style.bottom = `${newY}px`;
     }
   });
 
-  // 鼠标释放事件 - 结束拖拽
-  document.addEventListener('mouseup', (e) => {
-    if (!isDragging) return;
+  // Inject UI
+  panelUI.inject();
 
-    // 移除拖拽类
-    $collapseBtn.classList.remove('dragging');
-
-    if (isRealDrag) {
-      // 是拖拽操作：执行吸附，不触发展开
-      snapToEdge(host);
-      e.preventDefault();
-      e.stopPropagation();  // 阻止触发click事件
-    } else if (STATE.panelCollapsed) {
-      // 在收起状态下，简单点击会因为 mousedown 的 preventDefault 阻止原生 click
-      // 在 mouseup 中手动触发展开逻辑
-      togglePanel();
-      mouseupTriggeredToggle = true;
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    // 重置拖拽状态（简单点击已在上方处理）
-
-    isDragging = false;
-    isRealDrag = false;
-  });
-
-  // 边缘吸附函数
-  function snapToEdge(host) {
-    const rect = host.getBoundingClientRect();
-    const windowWidth = window.innerWidth;
-    const windowHeight = window.innerHeight;
-
-    const centerX = rect.left + rect.width / 2;
-    const currentY = windowHeight - rect.bottom;
-
-    let finalX;
-    if (centerX < windowWidth / 2) {
-      // 吸附到左边
-      finalX = 12;
-    } else {
-      // 吸附到右边
-      finalX = windowWidth - rect.width - 12;
-    }
-
-    // Y轴限制在安全范围内
-    const finalY = Math.max(16, Math.min(currentY, windowHeight - rect.height - 16));
-
-    // 添加平滑过渡动画到最终位置
-    host.style.transition = 'left 0.3s cubic-bezier(0.4, 0.0, 0.2, 1), bottom 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)';
-    host.style.left = `${finalX}px`;
-    host.style.bottom = `${finalY}px`;
-
-    // 清除过渡，准备下次拖拽
-    setTimeout(() => {
-      host.style.transition = '';
-    }, 300);
-
-    // 保存位置
-    STATE.panelPosition = { x: finalX, y: finalY };
-    chrome.storage.sync.set({ panelPosition: STATE.panelPosition });
-    updateTogglePosition();  // 更新 toggle 位置
-  }
-
-  // 窗口大小变化时重新吸附
-  window.addEventListener('resize', () => {
-    if (STATE.panelCollapsed) {
-      snapToEdge(host);
-    }
-    updateTogglePosition();  // 更新 toggle 位置
-  });
-
-  // 加载数据
-  initPanel();
-
-  // Initialize drag-and-drop
-  initDragAndDrop();
-}
-
-// 初始化面板数据
-async function initPanel() {
-  const shadow = document.getElementById('mlp-root')?.shadowRoot;
-  if (!shadow) return;
-
-  const $errorContainer = shadow.getElementById('errorContainer');
-  const $labelList = shadow.getElementById('labelList');
-
-  try {
-    // 获取标签
-    const response = await getLabels();
-
-    if (!response.ok) {
-      const safeError = escapeHtml(response.error || 'Unknown error');
-      $errorContainer.innerHTML = `
-        <div class="error">
-          Failed to load labels: ${safeError}<br>
-          Please check authorization in settings.
-        </div>
-      `;
-      $labelList.innerHTML = '<div class="empty-state">Authorization required</div>';
-      return;
-    }
-
+  // Load Labels
+  const response = await getLabels();
+  if (response.ok) {
     STATE.allLabels = response.labels || [];
-
-    // 初始化 System 分组
+    // Ensure system group exists
     if (!STATE.groups['system']) {
       STATE.groups['system'] = { name: 'System', labelIds: [] };
     }
-
-    // 渲染标签
-    renderPanel();
-  } catch (error) {
-    console.error('Init panel error:', error);
-    const safeError = escapeHtml(error.message || 'Unknown error');
-    $errorContainer.innerHTML = `
-      <div class="error">
-        Error: ${safeError}
-      </div>
-    `;
-  }
-}
-
-// Initialize drag-and-drop functionality
-function initDragAndDrop() {
-  let dragOverRow = null; // Current drag-over row
-
-  // Multi-layered Message ID extraction strategy
-  function getMessageIdFromRow(row) {
-    if (!row) return null;
-
-    let foundId = null;
-
-    // Helper: Convert Decimal ID (found in jslog) to Hex (required by API)
-    const normalizeId = (id) => {
-      if (!id) return null;
-      // If the ID is all digits (Decimal), convert to Hex
-      if (/^\d+$/.test(id)) {
-        try {
-          return BigInt(id).toString(16);
-        } catch (e) {
-          console.warn('[MLP] Failed to convert ID to hex:', id);
-          return id;
-        }
-      }
-      return id; // Already Hex or other format
-    };
-
-    // Strategy 0: Parse 'jslog' attribute (MOST RELIABLE for modern Gmail)
-    // The jslog contains base64-encoded JSON with decimal message IDs
-    const jslog = row.getAttribute('jslog');
-    if (jslog) {
-      try {
-        // 1. Extract the Base64 part (usually after "1:")
-        // Format: "18406; u014N:xr6bB,SYhH9d; 1:BASE64_DATA; 4:W10."
-        const match = jslog.match(/1:([^;"]+)/);
-        if (match && match[1]) {
-          // 2. Clean Base64 string (remove trailing non-base64 characters)
-          // Valid base64: A-Z, a-z, 0-9, +, /, =
-          // Gmail sometimes appends trailing periods ('.', '..') which break atob()
-          const cleanedBase64 = match[1].replace(/[^A-Za-z0-9+/=]/g, '');
-
-          // 3. Decode Base64
-          const decoded = atob(cleanedBase64);
-
-          // 4. Parse JSON array
-          // First element contains: "#thread-f:THREAD_ID|msg-f:MESSAGE_ID"
-          const dataArray = JSON.parse(decoded);
-          if (dataArray && dataArray[0]) {
-            // 5. Extract message ID using regex (finds "msg-f:12345...")
-            const idMatch = dataArray[0].match(/(?:msg|thread)-f:(\d+)/);
-            if (idMatch && idMatch[1]) {
-              foundId = idMatch[1];
-              console.log('[MLP] ID found via jslog (decimal):', foundId);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[MLP] Error parsing jslog:', e);
-      }
-    }
-
-    // Strategy 1: Checkbox Input (Standard View)
-    if (!foundId) {
-      const checkbox = row.querySelector('input[name="t"]');
-      if (checkbox) {
-        foundId = checkbox.getAttribute('data-message-id') ||
-                  checkbox.getAttribute('data-legacy-message-id') ||
-                  checkbox.value;
-      }
-    }
-
-    // Strategy 2: Data attributes on row
-    if (!foundId) {
-      foundId = row.getAttribute('data-message-id') ||
-                row.getAttribute('data-legacy-message-id');
-    }
-
-    // Strategy 3: Row ID (e.g. "msg-12345")
-    if (!foundId && row.id && row.id.startsWith('msg-')) {
-      foundId = row.id.replace('msg-', '');
-    }
-
-    // Strategy 4: Link Href parsing
-    if (!foundId) {
-      const link = row.querySelector('a[href*="/mail/"]');
-      if (link) {
-        const hrefMatch = link.href.match(/\/mail\/.*#.*\/([a-f0-9]+)/);
-        if (hrefMatch) foundId = hrefMatch[1];
-      }
-    }
-
-    // Clean up: Ignore placeholder values like '#'
-    if (foundId && foundId.startsWith('#')) {
-      foundId = null;
-    }
-
-    // Normalize: Convert decimal to hex if needed
-    const finalId = normalizeId(foundId);
-
-    if (finalId) {
-      console.log(`[MLP] Final Message ID (hex): ${finalId}`);
-    } else {
-      console.warn('[MLP] Could not extract Message ID from row', row);
-    }
-
-    return finalId;
+    panelUI.renderLabelList();
+  } else {
+    // Handle error? UI handles empty/loading state.
+    console.error('Failed to load labels:', response.error);
   }
 
-  // Add global style: drag-over effect
-  const style = document.createElement('style');
-  style.id = 'mlp-drag-drop-styles';
-  style.textContent = `
-    .mlp-drag-over {
-      background-color: #e8f0fe !important;
-      outline: 2px dashed #1a73e8 !important;
-      outline-offset: -2px;
-      transition: all 0.2s ease;
-    }
-  `;
-  document.head.appendChild(style);
-
-  // Event 1: dragover - hovering over Gmail row
-  document.addEventListener('dragover', (e) => {
-    // Only accept our custom drag type
-    if (!e.dataTransfer.types.includes('application/x-gmail-mlp-label-id')) {
-      return;
-    }
-
-    // Find closest email row (Gmail uses tr[role="row"] or div[role="row"])
-    const row = e.target.closest('tr[role="row"], div[role="row"]');
-
-    if (row && row !== dragOverRow) {
-      // Remove old row highlight
-      if (dragOverRow) {
-        dragOverRow.classList.remove('mlp-drag-over');
-      }
-      // Add new row highlight
-      dragOverRow = row;
-      dragOverRow.classList.add('mlp-drag-over');
-    }
-
-    if (row) {
-      e.preventDefault(); // Allow drop
-      e.dataTransfer.dropEffect = 'copy';
-    } else if (dragOverRow) {
-      // Mouse moved out of email row area
-      dragOverRow.classList.remove('mlp-drag-over');
-      dragOverRow = null;
-    }
-  });
-
-  // Event 2: dragleave - drag leaving
-  document.addEventListener('dragleave', (e) => {
-    if (dragOverRow && !dragOverRow.contains(e.relatedTarget)) {
-      dragOverRow.classList.remove('mlp-drag-over');
-      dragOverRow = null;
-    }
-  });
-
-  // Event 3: drop - label dropped
-  document.addEventListener('drop', async (e) => {
-    if (!dragOverRow) return;
-
-    const labelId = e.dataTransfer.getData('application/x-gmail-mlp-label-id');
-    const labelName = e.dataTransfer.getData('application/x-gmail-mlp-label-name');
-
-    if (!labelId) return;
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Extract Message ID
-    const messageId = getMessageIdFromRow(dragOverRow);
-
-    // Remove highlight
-    dragOverRow.classList.remove('mlp-drag-over');
-    const targetRow = dragOverRow; // Save reference for potential future use
-    dragOverRow = null;
-
-    if (!messageId) {
-      console.error('[MLP] Failed to extract Message ID from row');
-      showToast('Could not identify message ID', 'error');
-      return;
-    }
-
-    console.log(`[MLP] Applying label "${labelName}" to message ${messageId}`);
-
-    // Show loading state
-    showToast(`Applying label "${labelName}"...`, 'success');
-
-    // Send to background service
-    chrome.runtime.sendMessage({
-      type: 'APPLY_LABEL',
-      accountKey: getAccountKey(),
-      messageId: messageId,
-      labelId: labelId
-    }, (response) => {
-      if (!response) {
-        console.error('[MLP] No response from background');
-        showToast('Failed to apply label: No response from background', 'error');
-        return;
-      }
-
-      if (!response.ok) {
-        console.error('[MLP] Apply label failed:', response.error);
-        showToast(`Failed: ${response.error}`, 'error');
-      } else {
-        console.log('[MLP] Label applied successfully');
-        showToast(`Label "${labelName}" applied successfully`, 'success');
-      }
-    });
-  });
-
-  console.log('[MLP] Drag-and-drop initialized');
+  // Init DnD
+  dragDropHandler = new DragDropHandler(gmailAdapter, getAccountKey);
+  dragDropHandler.init();
 }
 
-// 等待 Gmail 加载完成
-function waitForGmailReady() {
-  return new Promise((resolve) => {
-    const checkInterval = setInterval(() => {
-      // 检查 Gmail 主区域是否已加载
-      const mainArea = document.querySelector('div[role="main"]') ||
-                      document.querySelector('[data-app="Gmail"]');
-
-      if (mainArea) {
-        clearInterval(checkInterval);
-        resolve();
-      }
-    }, 800);
-
-    // 30秒超时
-    setTimeout(() => {
-      clearInterval(checkInterval);
-      resolve();
-    }, 30000);
-  });
-}
-
-// 主入口
+// Bootstrap
 (async function main() {
-  // 检查是否在 Gmail 页面
   if (!location.hostname.includes('mail.google.com')) return;
+  console.log('[Multi-Label Picker] Waiting for Gmail...');
 
-  console.log('[Multi-Label Picker] Waiting for Gmail to load...');
+  await gmailAdapter.waitForGmailReady();
+  console.log('[Multi-Label Picker] Gmail loaded. Initializing...');
 
-  // 等待 Gmail 加载
-  await waitForGmailReady();
-
-  console.log('[Multi-Label Picker] Gmail loaded, injecting panel...');
-
-  // 先加载配置，确保位置、收起状态等在注入前生效
-  await loadConfig();
-
-  // 注入面板
-  injectPanel();
-
-  console.log('[Multi-Label Picker] Panel injected successfully');
+  init();
 })();

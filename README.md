@@ -1,6 +1,6 @@
 # Gmail Multi-Label Mod
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.2.1-blue.svg)
 ![Manifest](https://img.shields.io/badge/manifest-v3-green.svg)
 ![License](https://img.shields.io/badge/license-MIT-orange.svg)
 
@@ -8,7 +8,7 @@
 
 **Advanced label management, multi-select search, drag-and-drop label application, and Kanban-style organization for power users.**
 
-Gmail Multi-Label Picker transforms how you interact with Gmail labels. It introduces a native "Material Design" overlay that allows for filtering, draggable label organization without altering your actual Gmail label structure.
+Gmail Multi-Label Mod transforms how you interact with Gmail labels. It introduces a native "Material Design" overlay that allows for filtering, draggable label organization without altering your actual Gmail label structure.
 
 ------
 
@@ -210,6 +210,21 @@ A: Go to Settings and click "Refresh Labels". If that fails, check if you added 
 Q: The panel covers my emails.
 
 A: The panel is collapsible. Click the floating button to shrink it. You can also drag the floating button to a different position (if enabled in future updates).
+
+
+## 💻 Development (v0.2.1)
+
+### Project Structure
+The project relies on a modular architecture:
+
+- **`manifest.json`**: Extension configuration. Defines the load order of scripts.
+- **`sw.js`**: Service Worker. Handles OAuth2 authentication and Gmail API requests (`fetch`).
+- **`content.js`**: Main entry point. Initializes the `GmailAdapter`, `PanelUI`, and `DragDropHandler`.
+- **`GmailAdapter.js`**: Abstraction layer for Gmail DOM interactions. Handles the complex logic of finding email rows and extracting robust Message IDs (with fallbacks).
+- **`PanelUI.js`**: Renders the floating label picker using Shadow DOM to avoid CSS conflicts.
+- **`DragDropHandler.js`**: Manages drag-and-drop listeners and feedback.
+- **`styles.js`**: Contains the CSS styles injected into the Shadow DOM.
+- **`options.js`**: Manages the Kanban board logic for organizing labels.
 
 
 

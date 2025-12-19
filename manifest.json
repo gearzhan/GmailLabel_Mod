@@ -3,7 +3,10 @@
   "name": "Gmail Multi-Label Picker",
   "version": "0.2.0",
   "description": "Custom multi-select labels UI for Gmail; rename/sort/hide and search.",
-  "permissions": ["identity", "storage"],
+  "permissions": [
+    "identity",
+    "storage"
+  ],
   "host_permissions": [
     "https://mail.google.com/*",
     "https://www.googleapis.com/*"
@@ -13,8 +16,16 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://mail.google.com/*"],
-      "js": ["content.js"],
+      "matches": [
+        "https://mail.google.com/*"
+      ],
+      "js": [
+        "styles.js",
+        "GmailAdapter.js",
+        "PanelUI.js",
+        "DragDropHandler.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
