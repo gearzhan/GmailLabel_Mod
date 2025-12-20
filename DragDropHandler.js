@@ -104,13 +104,33 @@ class DragDropHandler {
         e.preventDefault();
         e.stopPropagation();
 
-        // Extract Message ID using the adapter
-        // 策略1: 从 row 元素提取 (列表视图)
-        let messageId = this.gmailAdapter.getMessageIdFromRow(this.dragOverRow);
+        console.log('[MLP] Drop target element:', this.dragOverRow.tagName, this.dragOverRow.className);
 
-        // 策略2: 从 URL 提取 (阅读窗格/详情视图)
+        // Extract Message ID using multiple strategies
+        let messageId = null;
+
+        // 策略1: 从 row 元素提取 (列表视图)
+        messageId = this.gmailAdapter.getMessageIdFromRow(this.dragOverRow);
+        if (messageId) {
+            console.log('[MLP] Message ID from row:', messageId);
+        }
+
+        // 策略2: 从 drop target 的 data 属性直接提取 (阅读窗格元素)
+        if (!messageId) {
+            const legacyId = this.dragOverRow.getAttribute('data-legacy-message-id');
+            const dataId = this.dragOverRow.getAttribute('data-message-id');
+            messageId = legacyId || dataId;
+            if (messageId) {
+                console.log('[MLP] Message ID from data attribute:', messageId);
+            }
+        }
+
+        // 策略3: 从 URL 提取 (阅读窗格/详情视图)
         if (!messageId) {
             messageId = this.gmailAdapter.getMessageIdFromUrl();
+            if (messageId) {
+                console.log('[MLP] Message ID from URL:', messageId);
+            }
         }
 
         // Remove highlight
@@ -118,6 +138,7 @@ class DragDropHandler {
         this.dragOverRow = null;
 
         if (!messageId) {
+            console.error('[MLP] All message ID extraction strategies failed');
             this.showToast('Could not identify message ID', 'error');
             return;
         }

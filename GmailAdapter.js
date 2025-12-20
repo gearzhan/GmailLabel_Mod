@@ -170,10 +170,47 @@ class GmailAdapter {
      */
     getMessageIdFromUrl() {
         const hash = window.location.hash;
-        // 匹配: #inbox/MESSAGE_ID 或 #label/XYZ/MESSAGE_ID
-        // Message ID 通常是 16+ 位的十六进制字符串
-        const match = hash.match(/\/([a-f0-9]{16,})$/i);
-        return match ? match[1] : null;
+        console.log('[MLP] Extracting message ID from URL hash:', hash);
+
+        // Helper: Convert Decimal ID to Hex (required by API)
+        const normalizeId = (id) => {
+            if (!id) return null;
+            // If the ID is all digits (Decimal), convert to Hex
+            if (/^\d+$/.test(id)) {
+                try {
+                    return BigInt(id).toString(16);
+                } catch (e) {
+                    console.warn('[MLP] Failed to convert ID to hex:', id);
+                    return id;
+                }
+            }
+            return id; // Already Hex or other format
+        };
+
+        // 策略1: 十六进制格式 #inbox/HEX_ID 或 #label/XYZ/HEX_ID
+        let match = hash.match(/\/([a-f0-9]{16,})$/i);
+        if (match) {
+            console.log('[MLP] Found hex message ID in URL:', match[1]);
+            return match[1];
+        }
+
+        // 策略2: 十进制格式 #inbox/DECIMAL_ID (Gmail有时使用)
+        match = hash.match(/\/(\d{18,})$/);
+        if (match) {
+            console.log('[MLP] Found decimal message ID in URL:', match[1]);
+            return normalizeId(match[1]);
+        }
+
+        // 策略3: 混合格式 (可能包含其他字符)
+        // 例如: #inbox/FMfcgz...
+        match = hash.match(/\/([A-Za-z0-9_-]{20,})$/);
+        if (match) {
+            console.log('[MLP] Found mixed format ID in URL:', match[1]);
+            return match[1];
+        }
+
+        console.log('[MLP] Could not extract message ID from URL');
+        return null;
     }
 
     // 边缘吸附函数
@@ -183,31 +220,40 @@ class GmailAdapter {
         const windowHeight = window.innerHeight;
 
         const centerX = rect.left + rect.width / 2;
-        const currentY = windowHeight - rect.bottom;
+        // Calculate current Bottom offset
+        const currentBottom = windowHeight - rect.bottom;
 
-        let finalX;
+        let finalLeft;
+        // Snap logic: Check if closer to Left or Right edge
         if (centerX < windowWidth / 2) {
-            // 吸附到左边
-            finalX = 12;
+            // Snap to Left
+            finalLeft = 12;
         } else {
-            // 吸附到右边
-            finalX = windowWidth - rect.width - 12;
+            // Snap to Right
+            // Left = WindowWidth - Width - Padding
+            finalLeft = windowWidth - rect.width - 12;
         }
 
-        // Y轴限制在安全范围内
-        const finalY = Math.max(16, Math.min(currentY, windowHeight - rect.height - 16));
+        // Y-Axis: Constrain within screen
+        // Top edge constraint: Bottom + Height cannot exceed WindowHeight - Padding
+        // So FinalBottom <= WindowHeight - Height - Padding
+        const topPadding = 20;
+        const maxBottom = windowHeight - rect.height - topPadding;
 
-        // 添加平滑过渡动画到最终位置
+        let finalBottom = Math.max(16, Math.min(currentBottom, maxBottom));
+
+        // Apply transition and new pos
         host.style.transition = 'left 0.3s cubic-bezier(0.4, 0.0, 0.2, 1), bottom 0.3s cubic-bezier(0.4, 0.0, 0.2, 1)';
-        host.style.left = `${finalX}px`;
-        host.style.bottom = `${finalY}px`;
+        host.style.right = 'auto'; // Reset right
+        host.style.left = `${finalLeft}px`;
+        host.style.bottom = `${finalBottom}px`;
 
-        // 清除过渡，准备下次拖拽
+        // Clear transition
         setTimeout(() => {
             host.style.transition = '';
         }, 300);
 
-        // 回调保存位置
-        if (updateCallback) updateCallback({ x: finalX, y: finalY });
+        // Callback with x/y structure (standard for Left positioning)
+        if (updateCallback) updateCallback({ x: finalLeft, y: finalBottom });
     }
 }

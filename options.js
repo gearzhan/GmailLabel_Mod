@@ -142,7 +142,7 @@ async function exportConfiguration() {
 
   // 创建下载
   const blob = new Blob([JSON.stringify(exportData, null, 2)],
-                        { type: 'application/json' });
+    { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -171,7 +171,7 @@ async function importConfiguration(file) {
     if (data.labelGroups && data.groups) {
       for (const [labelId, groupId] of Object.entries(data.labelGroups)) {
         if (groupId !== 'system' && groupId !== 'ungrouped' &&
-            !data.groups[groupId]) {
+          !data.groups[groupId]) {
           console.warn(`Invalid group reference: ${groupId} for label ${labelId}`);
           delete data.labelGroups[labelId];
         }
@@ -710,13 +710,13 @@ function renderCardGrid() {
   const buckets = {
     'ungrouped': [],
     'system': [],
-    ...Object.keys(groups).reduce((acc, id) => ({...acc, [id]: []}), {})
+    ...Object.keys(groups).reduce((acc, id) => ({ ...acc, [id]: [] }), {})
   };
 
   // 分配标签到桶
   filteredLabels.forEach(label => {
     const groupId = labelGroups[label.id] ||
-                   (label.type === 'system' ? 'system' : 'ungrouped');
+      (label.type === 'system' ? 'system' : 'ungrouped');
     if (buckets[groupId]) {
       buckets[groupId].push(label);
     } else {
@@ -760,7 +760,22 @@ function renderCardGrid() {
 // 加载标签
 async function loadLabels() {
   const $container = document.getElementById('labelTableContainer');
-  $container.innerHTML = '<div class="loading">Loading labels...</div>';
+  // Skeleton Loading State
+  $container.innerHTML = `
+    <div id="boardContainer" style="gap: 16px; padding: 16px 0;">
+      <div class="group-column" style="height: 400px; padding: 16px;">
+        <div class="skeleton" style="width: 60%; margin-bottom: 16px;"></div>
+        <div class="skeleton" style="height: 60px; margin-bottom: 8px;"></div>
+        <div class="skeleton" style="height: 60px; margin-bottom: 8px;"></div>
+        <div class="skeleton" style="height: 60px;"></div>
+      </div>
+      <div class="group-column" style="height: 400px; padding: 16px;">
+        <div class="skeleton" style="width: 40%; margin-bottom: 16px;"></div>
+        <div class="skeleton" style="height: 60px; margin-bottom: 8px;"></div>
+        <div class="skeleton" style="height: 60px;"></div>
+      </div>
+    </div>
+  `;
 
   const response = await fetchLabels();
 

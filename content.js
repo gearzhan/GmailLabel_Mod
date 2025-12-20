@@ -7,8 +7,8 @@ const STATE = {
   mode: 'AND',
   filterText: '',
   groups: {},
-  panelCollapsed: true, // Default
-  panelPosition: { x: 12, y: 16 }
+  panelCollapsed: true, // Default (Minimized)
+  panelPosition: { x: 20, y: 20 } // Default (Bottom-Left)
 };
 
 // Services
@@ -30,16 +30,16 @@ function getAccountKey() {
 async function loadConfig() {
   return new Promise((resolve) => {
     chrome.storage.sync.get([
-      'panelCollapsed',
-      'panelPosition',
+      // 'panelCollapsed', // Disabled: User wants reset on reload
+      // 'panelPosition',  // Disabled: User wants reset on reload
       'displayNameMap',
       'order',
       'hidden',
       'groups',
       'labelGroups'
     ], (data) => {
-      if (data.panelCollapsed !== undefined) STATE.panelCollapsed = data.panelCollapsed;
-      if (data.panelPosition) STATE.panelPosition = data.panelPosition;
+      // if (data.panelCollapsed !== undefined) STATE.panelCollapsed = data.panelCollapsed;
+      // if (data.panelPosition) STATE.panelPosition = data.panelPosition;
       STATE.groups = data.groups || {};
       STATE.displayNameMap = data.displayNameMap || {};
       STATE.order = data.order || {};
