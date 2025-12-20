@@ -164,6 +164,18 @@ class GmailAdapter {
         return finalId;
     }
 
+    /**
+     * 从 URL hash 提取当前查看的邮件 ID (用于 SplitPane 阅读窗格)
+     * @returns {string|null} - Hex Message ID 或 null
+     */
+    getMessageIdFromUrl() {
+        const hash = window.location.hash;
+        // 匹配: #inbox/MESSAGE_ID 或 #label/XYZ/MESSAGE_ID
+        // Message ID 通常是 16+ 位的十六进制字符串
+        const match = hash.match(/\/([a-f0-9]{16,})$/i);
+        return match ? match[1] : null;
+    }
+
     // 边缘吸附函数
     snapToEdge(host, updateCallback) {
         const rect = host.getBoundingClientRect();
